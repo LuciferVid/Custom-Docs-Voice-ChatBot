@@ -1,0 +1,28 @@
+# Environments
+.env
+.venv/
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Data and Models
+data/uploaded_docs/*
+!data/uploaded_docs/.gitkeep
+faiss_index/*
+!faiss_index/.gitkeep
+temp/*
+!temp/.gitkeep
+
+# IDEs
+.idea/
+.vscode/
+
+# OS
+.DS_Store
