@@ -20,11 +20,19 @@ from voice.text_to_speech import synthesize_speech
 # Load environment variables
 load_dotenv()
 
-# Initialize global instances
 app = FastAPI(title="Voice RAG Chatbot API")
 
-# Initialize Gemini client
-gemini_client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+# Global client cache
+_gemini_client = None
+
+def get_gemini_client():
+    global _gemini_client
+    if _gemini_client is None:
+        api_key = os.getenv("GEMINI_API_KEY")
+        if not api_key:
+            raise ValueError("GEMINI_API_KEY is not set in environment variables.")
+        _gemini_client = genai.Client(api_key=api_key)
+    return _gemini_client
 
 vector_store = FAISSVectorStore()
 memory = ConversationMemory()
@@ -82,7 +90,7 @@ async def chat(request: ChatRequest):
             request.query, 
             vector_store, 
             memory, 
-            gemini_client=gemini_client,
+            gemini_client=get_gemini_client(),
             filter_doc=request.filter_doc
         )
         return response
@@ -96,7 +104,8 @@ async def chat_voice_input(audio: UploadFile = File(...)):
     """
     try:
         audio_bytes = await audio.read()
-        transcription = transcribe_audio(audio_bytes, gemini_client=gemini_client)
+        client = get_gemini_client()
+        transcription = transcribe_audio(audio_bytes, gemini_client=client)
         
         if not transcription:
             return {"answer": "I couldn't hear you clearly.", "transcription": ""}
@@ -105,7 +114,7 @@ async def chat_voice_input(audio: UploadFile = File(...)):
             transcription, 
             vector_store, 
             memory, 
-            gemini_client=gemini_client
+            gemini_client=client
         )
         response["transcription"] = transcription
         return response
