@@ -7,7 +7,7 @@ logger = logging.getLogger(__name__)
 def get_answer(query: str, vector_store, memory, gemini_client, filter_doc: str = None) -> dict:
     """
     Orchestrates the RAG process using Google Gemini.
-    Pure Gemini version (OpenAI removed).
+    Pure Gemini version for high-performance retrieval.
     """
     history = memory.get_history()
     

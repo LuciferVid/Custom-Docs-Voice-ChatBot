@@ -1,81 +1,47 @@
-# Voice RAG Chatbot - Chat with Your Documents 🎙️📚
+# 🎙️ Custom Docs Voice ChatBot (Gemini Edition)
 
-A full-stack RAG (Retrieval-Augmented Generation) chatbot that allows users to chat with their documents using text or voice input.
+A premium, high-performance RAG (Retrieval-Augmented Generation) chatbot that allows you to talk to your documents using voice and high-fidelity intelligence.
 
-## 🌟 Features
+## ✨ Features
+- **🧠 100% Gemini Powered**: Uses Google's latest model for all reasoning and transcription.
+- **🔊 Voice-First Interaction**: High-quality free speech synthesis and native audio understanding.
+- **📁 Document Intelligence**: Support for PDF, DOCX, TXT, and MD files.
+- **🌑 Midnight Stealth UI**: A sophisticated, glassmorphism dark-mode interface.
+- **⚡ Supercharged RAG**: Native, lightweight text splitting and FAISS vector storage.
 
-- **Multi-format Support**: Upload PDF, DOCX, TXT, and MD files.
-- **Smart RAG**: Standalone query rephrasing with conversation history and context-aware retrieval.
-- **Voice Interface**: 
-    - **Speech-to-Text**: Record your questions using OpenAI Whisper.
-    - **Text-to-Speech**: Listen to responses with premium OpenAI TTS voices.
-- **Vector Database**: High-performance local search using FAISS and Sentence Transformers.
-- **Persistent Storage**: Documents and FAISS index persist between restarts.
-- **Clean UI**: Modern Streamlit interface with chat bubbles and document management.
+## 🛠️ Tech Stack
+- **AI Engine**: Google Gemini 2.0 Flash
+- **Voice Synthesis**: Google gTTS
+- **Vector DB**: FAISS (Meta)
+- **Framework**: FastAPI (Backend) & Streamlit (Frontend)
+- **Embeddings**: Sentence-Transformers
 
-## 🏗️ Architecture Flow
+## 🚀 Quick Start
 
-```text
-User Input (Voice/Text) 
-      👇
-[If Voice] -> Whisper API (STT) -> Transcription
-      👇
-Retriever (Standalone Query Generation) -> FAISS Search -> Context Chunks
-      👇
-LLM (GPT-4o) -> Context + Question -> Answer
-      👇
-[If Auto-play] -> OpenAI TTS (Voice) -> Audio Output
-      👇
-User Interface (Streamlit)
+### 1. Environment Setup
+Create a `.env` file in the root directory:
+```env
+GEMINI_API_KEY=your_key_here
 ```
-
-## 🚀 Setup Instructions
-
-### 1. Prerequisites
-- Python 3.9+
-- OpenAI API Key
 
 ### 2. Install Dependencies
 ```bash
 pip install -r requirements.txt
 ```
 
-### 3. Configure Environment
-Copy `.env.example` to `.env` and add your OpenAI API Key:
-```
-OPENAI_API_KEY=your_sk_...
-```
-
-### 4. Run the Backend
+### 3. Run the Application
+**Start the Backend:**
 ```bash
 python main.py
 ```
-Backend runs on `http://localhost:8000`.
 
-### 5. Run the Frontend
+**Start the Frontend:**
 ```bash
 streamlit run frontend/app.py
 ```
-Frontend runs on `http://localhost:8501`.
 
-## 📂 API Reference
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/upload` | POST | Upload and process a document |
-| `/chat` | POST | Text-based chat with context |
-| `/chat/voice-input` | POST | Audio-based chat |
-| `/chat/voice-output` | POST | Convert text to speech |
-| `/documents` | GET | List all indexed documents |
-| `/documents/{name}`| DELETE | Remove a document and re-index |
-| `/chat/history` | GET | Retrieve conversation logs |
-| `/chat/clear` | POST | Reset memory |
-
-## 🛠️ Tech Stack
-- **Backend**: FastAPI, OpenAI SDK, FAISS, LangChain.
-- **Frontend**: Streamlit, Audio Recorder.
-- **Embeddings**: `sentence-transformers/all-MiniLM-L6-v2`.
-- **Models**: `gpt-4o` (Chat), `whisper-1` (STT), `tts-1` (TTS).
+## 🌐 Deployment
+This project is optimized for deployment on **Render** (Backend) and **Streamlit Cloud** or **Hugging Face** (Frontend). Ensure the `GEMINI_API_KEY` is set in your hosting environment.
 
 ---
-Built with ❤️ by Antigravity.
+Created by [LuciferVid](https://github.com/LuciferVid)
