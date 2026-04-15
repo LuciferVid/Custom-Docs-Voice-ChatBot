@@ -16,14 +16,19 @@ def get_answer(query: str, vector_store, memory, openai_client, gemini_client=No
     if history:
         try:
             prompt = REPHRASE_PROMPT.format(history=history, query=query)
-            if provider == "gemini" and gemini_client:
+            # Force Gemini if OpenAI client is missing
+            actual_provider = provider
+            if actual_provider == "openai" and not openai_client:
+                actual_provider = "gemini"
+
+            if actual_provider == "gemini" and gemini_client:
                 response = gemini_client.models.generate_content(
-                    model="gemini-3-flash-preview",
+                    model="gemini-2.0-flash",
                     contents=prompt,
                     config={"temperature": 0}
                 )
                 rephrased_query = response.text.strip()
-            else:
+            elif openai_client:
                 response = openai_client.chat.completions.create(
                     model="gpt-4o",
                     messages=[
@@ -43,14 +48,19 @@ def get_answer(query: str, vector_store, memory, openai_client, gemini_client=No
     # Step 3: Generate answer
     try:
         prompt = RAG_PROMPT.format(history=history, context=context, query=rephrased_query)
-        if provider == "gemini" and gemini_client:
+        # Force Gemini if OpenAI client is missing
+        actual_provider = provider
+        if actual_provider == "openai" and not openai_client:
+            actual_provider = "gemini"
+
+        if actual_provider == "gemini" and gemini_client:
             response = gemini_client.models.generate_content(
-                model="gemini-3-flash-preview",
+                model="gemini-2.0-flash",
                 contents=prompt,
                 config={"temperature": 0}
             )
             answer_text = response.text.strip()
-        else:
+        elif openai_client:
             response = openai_client.chat.completions.create(
                 model="gpt-4o",
                 messages=[
@@ -60,6 +70,8 @@ def get_answer(query: str, vector_store, memory, openai_client, gemini_client=No
                 temperature=0
             )
             answer_text = response.choices[0].message.content.strip()
+        else:
+            answer_text = "No AI provider configured. Please provide a Gemini or OpenAI API key."
     except Exception as e:
         logger.error(f"Error generating answer: {e}")
         answer_text = "I encountered an error while searching for the answer."

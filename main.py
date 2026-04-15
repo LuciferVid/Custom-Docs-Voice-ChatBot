@@ -23,8 +23,14 @@ load_dotenv()
 
 # Initialize global instances
 app = FastAPI(title="Voice RAG Chatbot API")
-openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-# Initialize Gemini client with new SDK
+
+openai_api_key = os.getenv("OPENAI_API_KEY")
+if openai_api_key and openai_api_key != "your_openai_api_key_here":
+    openai_client = OpenAI(api_key=openai_api_key)
+else:
+    openai_client = None
+    
+# Initialize Gemini client
 gemini_client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
 vector_store = FAISSVectorStore()
