@@ -10,7 +10,7 @@ API_URL = "http://localhost:8000"
 
 st.set_page_config(page_title="Voice RAG Chatbot", page_icon="💬", layout="wide")
 
-# Custom CSS for styling
+# Custom CSS for Premium Midnight Stealth Theme
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&display=swap');
@@ -103,16 +103,15 @@ if "messages" not in st.session_state:
 if "auto_play" not in st.session_state:
     st.session_state.auto_play = True
 
-def play_audio(text, voice):
-    """Fetches and plays TTS audio."""
+def play_audio(text):
+    """Fetches and plays TTS audio (Free Version)."""
     try:
-        resp = requests.post(f"{API_URL}/chat/voice-output", json={"text": text, "voice": voice})
+        resp = requests.post(f"{API_URL}/chat/voice-output", json={"text": text})
         if resp.status_code == 200:
             audio_base64 = base64.b64encode(resp.content).decode("utf-8")
-            audio_tag = f'<audio autoplay="true" src="data:audio/mp3;base64,{audio_base64}">'
-            st.markdown(audio_tag, unsafe_allow_html=True)
-    except Exception as e:
-        st.error(f"Error playing audio: {e}")
+            st.markdown(f'<audio autoplay="true" src="data:audio/mp3;base64,{audio_base64}">', unsafe_allow_html=True)
+    except:
+        pass
 
 # Sidebar
 with st.sidebar:
@@ -139,23 +138,22 @@ with st.sidebar:
             if docs:
                 for doc in docs:
                     col1, col2 = st.columns([4, 1])
-                    col1.text(f"📄 {doc['doc_name']} ({doc['chunk_count']} chunks)")
+                    col1.text(f"📄 {doc['doc_name']}")
                     if col2.button("🗑️", key=f"del_{doc['doc_name']}"):
                         requests.delete(f"{API_URL}/documents/{doc['doc_name']}")
                         st.rerun()
             else:
                 st.info("No documents uploaded yet.")
     except:
-        st.error("Cannot connect to backend server.")
+        st.error("Connection failed.")
 
     st.divider()
-    st.subheader("🤖 Model Provider")
-    provider = st.radio("Choose Model", ["OpenAI (GPT-4o)", "Google (Gemini 3 Flash)"], index=1)
-    provider_id = "openai" if "OpenAI" in provider else "gemini"
+    st.subheader("🤖 Intelligence")
+    st.info("Powered by Google Gemini 2.0 Flash")
+    provider_id = "gemini"
     
     st.divider()
     st.subheader("🔊 Voice Settings")
-    voice_option = st.selectbox("Select Voice", ["nova", "alloy", "echo", "onyx", "shimmer"], format_func=lambda x: x.capitalize())
     st.session_state.auto_play = st.toggle("Auto-play responses", value=st.session_state.auto_play)
     
     st.divider()
@@ -170,10 +168,7 @@ st.title("💬 Chat with Your Documents")
 # Robust document fetching
 try:
     docs_resp = requests.get(f"{API_URL}/documents")
-    if docs_resp.status_code == 200:
-        docs = docs_resp.json()
-    else:
-        docs = []
+    docs = docs_resp.json() if docs_resp.status_code == 200 else []
 except:
     docs = []
 
@@ -186,70 +181,39 @@ else:
     filter_doc = None if selected_doc == "All Documents" else selected_doc
 
     # Chat Area
-    chat_container = st.container()
-    with chat_container:
-        for i, msg in enumerate(st.session_state.messages):
-            role = msg["role"]
-            content = msg["content"]
-            metadata = msg.get("metadata", {})
-            
-            if role == "user":
-                st.markdown(f'<div class="user-bubble">{content}</div>', unsafe_allow_html=True)
-            else:
-                st.markdown(f'<div class="assistant-bubble">{content}</div>', unsafe_allow_html=True)
-                
-                # Show sources if available
-                sources = metadata.get("sources", [])
-                if sources:
-                    with st.expander("📄 Sources", expanded=False):
-                        for src in sources:
-                            st.caption(f"- {src}")
-                
-                # Manual Play Button
-                if st.button("🔊 Play Response", key=f"play_{i}"):
-                    play_audio(content, voice_option)
+    for i, msg in enumerate(st.session_state.messages):
+        role, content = msg["role"], msg["content"]
+        if role == "user":
+            st.markdown(f'<div class="user-bubble">{content}</div>', unsafe_allow_html=True)
+        else:
+            st.markdown(f'<div class="assistant-bubble">{content}</div>', unsafe_allow_html=True)
+            if st.button("🔊 Play", key=f"play_{i}"):
+                play_audio(content)
 
-    # Sticky Input Area at the bottom
+    # Input Area
     st.write("---")
     col1, col2, col3 = st.columns([10, 1, 1], vertical_alignment="bottom")
-    
     with col1:
         user_input = st.text_input("Type your question...", key="text_input", label_visibility="collapsed")
-    
     with col2:
         audio_bytes = audio_recorder(text="", icon_size="2x", neutral_color="#007bff")
-    
     with col3:
         send_button = st.button("Send", use_container_width=True)
 
-    # Logic for text input
-    if send_button and user_input:
+    if (send_button and user_input) or audio_bytes:
         payload = {"query": user_input, "filter_doc": filter_doc, "provider": provider_id}
-        with st.spinner("Thinking..."):
-            resp = requests.post(f"{API_URL}/chat", json=payload)
-            if resp.status_code == 200:
-                result = resp.json()
-                st.session_state.messages.append({"role": "user", "content": user_input})
-                st.session_state.messages.append({"role": "assistant", "content": result["answer"]})
-                
-                if st.session_state.auto_play:
-                    play_audio(result["answer"], voice_option)
-                st.rerun()
-
-    # Logic for audio input
-    if audio_bytes:
-        with st.spinner("Transcribing..."):
-            # Note: passed via query param or multipart for provider
+        url = f"{API_URL}/chat"
+        
+        if audio_bytes:
             files = {"audio": ("query.wav", audio_bytes, "audio/wav")}
             resp = requests.post(f"{API_URL}/chat/voice-input?provider={provider_id}", files=files)
-            if resp.status_code == 200:
-                result = resp.json()
-                if result.get("transcription"):
-                    st.session_state.messages.append({"role": "user", "content": result["transcription"]})
-                    st.session_state.messages.append({"role": "assistant", "content": result["answer"]})
-                    
-                    if st.session_state.auto_play:
-                        play_audio(result["answer"], voice_option)
-                    st.rerun()
-                else:
-                    st.warning("Could not transcribe audio.")
+        else:
+            resp = requests.post(url, json=payload)
+            
+        if resp.status_code == 200:
+            result = resp.json()
+            st.session_state.messages.append({"role": "user", "content": result.get("transcription", user_input)})
+            st.session_state.messages.append({"role": "assistant", "content": result["answer"]})
+            if st.session_state.auto_play:
+                play_audio(result["answer"])
+            st.rerun()
