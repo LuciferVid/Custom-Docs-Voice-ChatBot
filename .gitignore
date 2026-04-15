@@ -1,28 +1,45 @@
-# Environments
-.env
-.venv/
-env/
-venv/
-ENV/
-env.bak/
-venv.bak/
-
-# Byte-compiled / optimized / DLL files
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
 
-# Data and Models
+# Virtual Environment
+.venv/
+venv/
+ENV/
+
+# Data & Database
 data/uploaded_docs/*
 !data/uploaded_docs/.gitkeep
-faiss_index/*
-!faiss_index/.gitkeep
 temp/*
 !temp/.gitkeep
+faiss_index/index.bin
+faiss_index/metadata.json
+
+# Environment Variables
+.env
+.env.local
 
 # IDEs
-.idea/
 .vscode/
-
-# OS
+.idea/
 .DS_Store
+*.log

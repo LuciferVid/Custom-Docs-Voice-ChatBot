@@ -4,9 +4,10 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-def get_answer(query: str, vector_store, memory, openai_client, filter_doc: str = None) -> dict:
+def get_answer(query: str, vector_store, memory, openai_client, gemini_client=None, provider: str = "openai", filter_doc: str = None) -> dict:
     """
     Orchestrates the RAG process: rephrasing, retrieval, and generation.
+    Supports either OpenAI or Google Gemini.
     """
     history = memory.get_history()
     
@@ -14,15 +15,24 @@ def get_answer(query: str, vector_store, memory, openai_client, filter_doc: str 
     rephrased_query = query
     if history:
         try:
-            response = openai_client.chat.completions.create(
-                model="gpt-4o",
-                messages=[
-                    {"role": "system", "content": "You are a helpful assistant that rephrases questions."},
-                    {"role": "user", "content": REPHRASE_PROMPT.format(history=history, query=query)}
-                ],
-                temperature=0
-            )
-            rephrased_query = response.choices[0].message.content.strip()
+            prompt = REPHRASE_PROMPT.format(history=history, query=query)
+            if provider == "gemini" and gemini_client:
+                response = gemini_client.models.generate_content(
+                    model="gemini-3-flash-preview",
+                    contents=prompt,
+                    config={"temperature": 0}
+                )
+                rephrased_query = response.text.strip()
+            else:
+                response = openai_client.chat.completions.create(
+                    model="gpt-4o",
+                    messages=[
+                        {"role": "system", "content": "You are a helpful assistant that rephrases questions."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    temperature=0
+                )
+                rephrased_query = response.choices[0].message.content.strip()
             logger.info(f"Rephrased query: {rephrased_query}")
         except Exception as e:
             logger.error(f"Error rephrasing query: {e}")
@@ -32,15 +42,24 @@ def get_answer(query: str, vector_store, memory, openai_client, filter_doc: str 
     
     # Step 3: Generate answer
     try:
-        response = openai_client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {"role": "system", "content": "You are a helpful document assistant."},
-                {"role": "user", "content": RAG_PROMPT.format(history=history, context=context, query=rephrased_query)}
-            ],
-            temperature=0
-        )
-        answer_text = response.choices[0].message.content.strip()
+        prompt = RAG_PROMPT.format(history=history, context=context, query=rephrased_query)
+        if provider == "gemini" and gemini_client:
+            response = gemini_client.models.generate_content(
+                model="gemini-3-flash-preview",
+                contents=prompt,
+                config={"temperature": 0}
+            )
+            answer_text = response.text.strip()
+        else:
+            response = openai_client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {"role": "system", "content": "You are a helpful document assistant."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0
+            )
+            answer_text = response.choices[0].message.content.strip()
     except Exception as e:
         logger.error(f"Error generating answer: {e}")
         answer_text = "I encountered an error while searching for the answer."

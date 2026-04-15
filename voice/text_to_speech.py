@@ -1,25 +1,27 @@
-import os
-import uuid
+import io
 import logging
+from gtts import gTTS
 
 logger = logging.getLogger(__name__)
 
 def synthesize_speech(openai_client, text: str, voice: str = "nova") -> bytes:
     """
-    Synthesizes speech from text using OpenAI TTS API.
+    Synthesizes speech from text using Google TTS (Free).
     """
-    # Trim to 4000 characters (TTS limit)
+    # Trim to 4000 characters
     trimmed_text = text[:4000]
     
     try:
-        response = openai_client.audio.speech.create(
-            model="tts-1",
-            voice=voice,
-            input=trimmed_text
-        )
-        return response.content
+        # Use gTTS for free, reliable high-quality voice
+        tts = gTTS(text=trimmed_text, lang='en', slow=False)
+        
+        # Save to bytes stream
+        audio_fp = io.BytesIO()
+        tts.write_to_fp(audio_fp)
+        return audio_fp.getvalue()
+        
     except Exception as e:
-        logger.error(f"Error synthesizing speech: {e}")
+        logger.error(f"Error synthesizing speech with gTTS: {e}")
         return b""
 
 def save_audio(audio_bytes: bytes, filename: str = None) -> str:

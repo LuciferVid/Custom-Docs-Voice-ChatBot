@@ -13,65 +13,79 @@ st.set_page_config(page_title="Voice RAG Chatbot", page_icon="💬", layout="wid
 # Custom CSS for styling
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&display=swap');
     
-    * { font-family: 'Inter', sans-serif; }
+    * { font-family: 'Outfit', sans-serif; }
     
+    /* Midnight Base */
     .stApp {
-        background: radial-gradient(circle at top right, #f8f9fa, #e9ecef);
+        background: radial-gradient(circle at 20% 20%, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+        color: #e2e8f0;
     }
     
-    /* Premium Chat Bubbles */
+    /* Premium Glassmorphism Cards */
     .user-bubble {
-        background: linear-gradient(135deg, #6366f1 0%, #4338ca 100%);
+        background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
         color: white;
-        padding: 14px 18px;
-        border-radius: 20px 20px 4px 20px;
-        margin-bottom: 20px;
-        max-width: 85%;
+        padding: 18px 22px;
+        border-radius: 24px 24px 4px 24px;
+        margin-bottom: 24px;
+        max-width: 80%;
         float: right;
         clear: both;
-        box-shadow: 0 4px 15px rgba(99, 102, 241, 0.2);
-        animation: fadeInRight 0.3s ease-out;
+        box-shadow: 0 8px 32px rgba(99, 102, 241, 0.3);
+        font-weight: 500;
+        animation: fadeInRight 0.4s cubic-bezier(0.16, 1, 0.3, 1);
     }
     
     .assistant-bubble {
-        background: rgba(255, 255, 255, 0.8);
-        backdrop-filter: blur(10px);
-        color: #1f2937;
-        padding: 14px 18px;
-        border-radius: 20px 20px 20px 4px;
-        margin-bottom: 20px;
+        background: rgba(255, 255, 255, 0.05);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+        color: #ffffff;
+        padding: 18px 22px;
+        border-radius: 24px 24px 24px 4px;
+        margin-bottom: 24px;
         max-width: 85%;
         float: left;
         clear: both;
-        border: 1px solid rgba(255, 255, 255, 0.3);
-        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
-        animation: fadeInLeft 0.3s ease-out;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+        animation: fadeInLeft 0.4s cubic-bezier(0.16, 1, 0.3, 1);
     }
     
-    .source-tag {
-        font-size: 0.85em;
-        color: #4b5563;
-        font-weight: 600;
-        margin-top: 8px;
+    .stMarkdown p {
+        color: #e2e8f0 !important;
+        font-size: 1.05rem;
     }
     
-    @keyframes fadeInRight {
-        from { opacity: 0; transform: translateX(20px); }
-        to { opacity: 1; transform: translateX(0); }
-    }
-    
-    @keyframes fadeInLeft {
-        from { opacity: 0; transform: translateX(-20px); }
-        to { opacity: 1; transform: translateX(0); }
-    }
-    
-    /* Sidebar Styling */
+    /* Sidebar Overhaul */
     section[data-testid="stSidebar"] {
-        background-color: #ffffff;
-        border-right: 1px solid #e5e7eb;
+        background-color: #0f172a !important;
+        border-right: 1px solid rgba(255, 255, 255, 0.1);
     }
+    
+    section[data-testid="stSidebar"] h1, section[data-testid="stSidebar"] h2, section[data-testid="stSidebar"] h3 {
+        color: #ffffff !important;
+    }
+
+    /* Buttons and Inputs */
+    .stButton>button {
+        background: linear-gradient(90deg, #4f46e5, #7c3aed);
+        color: white;
+        border: none;
+        border-radius: 12px;
+        font-weight: 600;
+        transition: all 0.3s ease;
+    }
+    
+    .stButton>button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 15px rgba(99, 102, 241, 0.4);
+    }
+    
+    @keyframes fadeInRight { from { opacity: 0; transform: translateX(30px); } to { opacity: 1; transform: translateX(0); } }
+    @keyframes fadeInLeft { from { opacity: 0; transform: translateX(-30px); } to { opacity: 1; transform: translateX(0); } }
 </style>
 """, unsafe_allow_html=True)
 
@@ -135,6 +149,11 @@ with st.sidebar:
         st.error("Cannot connect to backend server.")
 
     st.divider()
+    st.subheader("🤖 Model Provider")
+    provider = st.radio("Choose Model", ["OpenAI (GPT-4o)", "Google (Gemini 3 Flash)"], index=1)
+    provider_id = "openai" if "OpenAI" in provider else "gemini"
+    
+    st.divider()
     st.subheader("🔊 Voice Settings")
     voice_option = st.selectbox("Select Voice", ["nova", "alloy", "echo", "onyx", "shimmer"], format_func=lambda x: x.capitalize())
     st.session_state.auto_play = st.toggle("Auto-play responses", value=st.session_state.auto_play)
@@ -148,11 +167,20 @@ with st.sidebar:
 # Main Area
 st.title("💬 Chat with Your Documents")
 
-if not any(requests.get(f"{API_URL}/documents").json()):
+# Robust document fetching
+try:
+    docs_resp = requests.get(f"{API_URL}/documents")
+    if docs_resp.status_code == 200:
+        docs = docs_resp.json()
+    else:
+        docs = []
+except:
+    docs = []
+
+if not docs:
     st.warning("👆 Upload documents from the sidebar to get started", icon="⚠️")
 else:
     # Document filter
-    docs = requests.get(f"{API_URL}/documents").json()
     doc_options = ["All Documents"] + [d['doc_name'] for d in docs]
     selected_doc = st.selectbox("Search in:", doc_options)
     filter_doc = None if selected_doc == "All Documents" else selected_doc
@@ -196,7 +224,7 @@ else:
 
     # Logic for text input
     if send_button and user_input:
-        payload = {"query": user_input, "filter_doc": filter_doc}
+        payload = {"query": user_input, "filter_doc": filter_doc, "provider": provider_id}
         with st.spinner("Thinking..."):
             resp = requests.post(f"{API_URL}/chat", json=payload)
             if resp.status_code == 200:
@@ -211,8 +239,9 @@ else:
     # Logic for audio input
     if audio_bytes:
         with st.spinner("Transcribing..."):
+            # Note: passed via query param or multipart for provider
             files = {"audio": ("query.wav", audio_bytes, "audio/wav")}
-            resp = requests.post(f"{API_URL}/chat/voice-input", files=files)
+            resp = requests.post(f"{API_URL}/chat/voice-input?provider={provider_id}", files=files)
             if resp.status_code == 200:
                 result = resp.json()
                 if result.get("transcription"):

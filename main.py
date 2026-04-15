@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from typing import Optional
 import io
 from openai import OpenAI
+from google import genai
 from dotenv import load_dotenv
 
 from ingestion.document_loader import load_document
@@ -23,6 +24,9 @@ load_dotenv()
 # Initialize global instances
 app = FastAPI(title="Voice RAG Chatbot API")
 openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+# Initialize Gemini client with new SDK
+gemini_client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+
 vector_store = FAISSVectorStore()
 memory = ConversationMemory()
 
@@ -41,6 +45,7 @@ for d in ["data/uploaded_docs", "temp", "faiss_index"]:
 class ChatRequest(BaseModel):
     query: str
     filter_doc: Optional[str] = None
+    provider: str = "openai"  # "openai" or "gemini"
 
 class TTSRequest(BaseModel):
     text: str
@@ -81,6 +86,8 @@ async def chat(request: ChatRequest):
             vector_store, 
             memory, 
             openai_client, 
+            gemini_client=gemini_client,
+            provider=request.provider,
             filter_doc=request.filter_doc
         )
         return response
@@ -88,22 +95,30 @@ async def chat(request: ChatRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/chat/voice-input")
-async def chat_voice_input(audio: UploadFile = File(...)):
+async def chat_voice_input(audio: UploadFile = File(...), provider: str = "openai"):
     """
     Endpoint for voice-to-text input + RAG chat.
     """
     try:
         audio_bytes = await audio.read()
-        transcription = transcribe_audio(openai_client, audio_bytes)
+        transcription = transcribe_audio(openai_client, audio_bytes, gemini_client=gemini_client)
         
         if not transcription:
             return {"answer": "I couldn't hear you clearly.", "transcription": ""}
             
-        response = get_answer(transcription, vector_store, memory, openai_client)
+        response = get_answer(
+            transcription, 
+            vector_store, 
+            memory, 
+            openai_client, 
+            gemini_client=gemini_client,
+            provider=provider
+        )
         response["transcription"] = transcription
         return response
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.post("/chat/voice-output")
 async def chat_voice_output(request: TTSRequest):
