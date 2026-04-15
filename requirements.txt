@@ -1,7 +1,4 @@
 openai
-langchain
-langchain-openai
-langchain-community
 faiss-cpu
 sentence-transformers
 pypdf2
@@ -12,7 +9,6 @@ uvicorn
 streamlit
 python-dotenv
 pydantic
-tiktoken
 numpy
 audio-recorder-streamlit
 python-multipart
