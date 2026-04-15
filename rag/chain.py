@@ -4,10 +4,10 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-def get_answer(query: str, vector_store, memory, openai_client, gemini_client=None, provider: str = "openai", filter_doc: str = None) -> dict:
+def get_answer(query: str, vector_store, memory, gemini_client, filter_doc: str = None) -> dict:
     """
-    Orchestrates the RAG process: rephrasing, retrieval, and generation.
-    Supports either OpenAI or Google Gemini.
+    Orchestrates the RAG process using Google Gemini.
+    Pure Gemini version (OpenAI removed).
     """
     history = memory.get_history()
     
@@ -16,31 +16,15 @@ def get_answer(query: str, vector_store, memory, openai_client, gemini_client=No
     if history:
         try:
             prompt = REPHRASE_PROMPT.format(history=history, query=query)
-            # Force Gemini if OpenAI client is missing
-            actual_provider = provider
-            if actual_provider == "openai" and not openai_client:
-                actual_provider = "gemini"
-
-            if actual_provider == "gemini" and gemini_client:
-                response = gemini_client.models.generate_content(
-                    model="gemini-2.0-flash",
-                    contents=prompt,
-                    config={"temperature": 0}
-                )
-                rephrased_query = response.text.strip()
-            elif openai_client:
-                response = openai_client.chat.completions.create(
-                    model="gpt-4o",
-                    messages=[
-                        {"role": "system", "content": "You are a helpful assistant that rephrases questions."},
-                        {"role": "user", "content": prompt}
-                    ],
-                    temperature=0
-                )
-                rephrased_query = response.choices[0].message.content.strip()
+            response = gemini_client.models.generate_content(
+                model="gemini-2.0-flash",
+                contents=prompt,
+                config={"temperature": 0}
+            )
+            rephrased_query = response.text.strip()
             logger.info(f"Rephrased query: {rephrased_query}")
         except Exception as e:
-            logger.error(f"Error rephrasing query: {e}")
+            logger.error(f"Error rephrasing query with Gemini: {e}")
             
     # Step 2: Retrieve context
     context, sources = retrieve_context(rephrased_query, vector_store, filter_doc=filter_doc)
@@ -48,32 +32,14 @@ def get_answer(query: str, vector_store, memory, openai_client, gemini_client=No
     # Step 3: Generate answer
     try:
         prompt = RAG_PROMPT.format(history=history, context=context, query=rephrased_query)
-        # Force Gemini if OpenAI client is missing
-        actual_provider = provider
-        if actual_provider == "openai" and not openai_client:
-            actual_provider = "gemini"
-
-        if actual_provider == "gemini" and gemini_client:
-            response = gemini_client.models.generate_content(
-                model="gemini-2.0-flash",
-                contents=prompt,
-                config={"temperature": 0}
-            )
-            answer_text = response.text.strip()
-        elif openai_client:
-            response = openai_client.chat.completions.create(
-                model="gpt-4o",
-                messages=[
-                    {"role": "system", "content": "You are a helpful document assistant."},
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=0
-            )
-            answer_text = response.choices[0].message.content.strip()
-        else:
-            answer_text = "No AI provider configured. Please provide a Gemini or OpenAI API key."
+        response = gemini_client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=prompt,
+            config={"temperature": 0}
+        )
+        answer_text = response.text.strip()
     except Exception as e:
-        logger.error(f"Error generating answer: {e}")
+        logger.error(f"Error generating answer with Gemini: {e}")
         answer_text = "I encountered an error while searching for the answer."
 
     # Step 4: Update memory

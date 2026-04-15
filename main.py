@@ -6,7 +6,6 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import Optional
 import io
-from openai import OpenAI
 from google import genai
 from dotenv import load_dotenv
 
@@ -24,12 +23,6 @@ load_dotenv()
 # Initialize global instances
 app = FastAPI(title="Voice RAG Chatbot API")
 
-openai_api_key = os.getenv("OPENAI_API_KEY")
-if openai_api_key and openai_api_key != "your_openai_api_key_here":
-    openai_client = OpenAI(api_key=openai_api_key)
-else:
-    openai_client = None
-    
 # Initialize Gemini client
 gemini_client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
@@ -51,11 +44,9 @@ for d in ["data/uploaded_docs", "temp", "faiss_index"]:
 class ChatRequest(BaseModel):
     query: str
     filter_doc: Optional[str] = None
-    provider: str = "openai"  # "openai" or "gemini"
 
 class TTSRequest(BaseModel):
     text: str
-    voice: str = "nova"
 
 @app.post("/upload")
 async def upload_document(file: UploadFile = File(...)):
@@ -84,16 +75,14 @@ async def upload_document(file: UploadFile = File(...)):
 @app.post("/chat")
 async def chat(request: ChatRequest):
     """
-    Text chat endpoint.
+    Text chat endpoint using Gemini.
     """
     try:
         response = get_answer(
             request.query, 
             vector_store, 
             memory, 
-            openai_client, 
             gemini_client=gemini_client,
-            provider=request.provider,
             filter_doc=request.filter_doc
         )
         return response
@@ -101,13 +90,13 @@ async def chat(request: ChatRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/chat/voice-input")
-async def chat_voice_input(audio: UploadFile = File(...), provider: str = "openai"):
+async def chat_voice_input(audio: UploadFile = File(...)):
     """
-    Endpoint for voice-to-text input + RAG chat.
+    Endpoint for Gemini-powered voice-to-text input + RAG chat.
     """
     try:
         audio_bytes = await audio.read()
-        transcription = transcribe_audio(openai_client, audio_bytes, gemini_client=gemini_client)
+        transcription = transcribe_audio(audio_bytes, gemini_client=gemini_client)
         
         if not transcription:
             return {"answer": "I couldn't hear you clearly.", "transcription": ""}
@@ -116,23 +105,20 @@ async def chat_voice_input(audio: UploadFile = File(...), provider: str = "opena
             transcription, 
             vector_store, 
             memory, 
-            openai_client, 
-            gemini_client=gemini_client,
-            provider=provider
+            gemini_client=gemini_client
         )
         response["transcription"] = transcription
         return response
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-
 @app.post("/chat/voice-output")
 async def chat_voice_output(request: TTSRequest):
     """
-    Text-to-speech endpoint.
+    Free Text-to-speech endpoint.
     """
     try:
-        audio_content = synthesize_speech(openai_client, request.text, request.voice)
+        audio_content = synthesize_speech(request.text)
         return StreamingResponse(io.BytesIO(audio_content), media_type="audio/mpeg")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -176,4 +162,6 @@ async def chat_history():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    # Use environment port for hosting platforms
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run(app, host="0.0.0.0", port=port)
