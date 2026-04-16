@@ -31,6 +31,9 @@ def generate_embeddings_batch(texts: list[str]) -> list[list[float]]:
     """
     Generates embeddings for a batch using Gemini's Cloud API.
     """
+    if not texts:
+        return []
+        
     client = get_client()
     try:
         result = client.models.embed_content(

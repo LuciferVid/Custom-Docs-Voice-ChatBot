@@ -67,7 +67,17 @@ async def upload_document(file: UploadFile = File(...)):
             shutil.copyfileobj(file.file, buffer)
             
         pages = load_document(file_path)
+        if not pages:
+            if os.path.exists(file_path):
+                os.remove(file_path)
+            raise HTTPException(status_code=400, detail="Document contains no extractable text or is too short (min 50 chars).")
+            
         chunks = split_into_chunks(pages)
+        if not chunks:
+            if os.path.exists(file_path):
+                os.remove(file_path)
+            raise HTTPException(status_code=400, detail="Document could not be processed into meaningful context.")
+            
         vector_store.add_document(chunks, file.filename)
         
         return {
