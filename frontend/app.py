@@ -5,98 +5,51 @@ from audio_recorder_streamlit import audio_recorder
 import time
 import base64
 
-# Configuration
-DEFAULT_API_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
-if "API_URL" not in st.session_state:
-    st.session_state.API_URL = DEFAULT_API_URL
-
-API_URL = st.session_state.API_URL
+# --- Configuration ---
+# Standardizes the connection to the backend. 
+# Defaults to localhost for dev, or the production URL set in environment variables.
+BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
 
 st.set_page_config(page_title="Intelligence Core | RAG", page_icon="🔗", layout="wide")
 
-# Premium High-End CSS (Lucide & Custom Minimalist)
+# Premium High-End CSS
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
     
     * { font-family: 'Inter', sans-serif; }
     
-    /* Elegant Dark Canvas */
-    .stApp {
-        background-color: #0b0e14;
-        color: #f1f5f9;
-    }
+    .stApp { background-color: #0b0e14; color: #f1f5f9; }
     
-    /* Professional Chat Bubbles */
     .user-bubble {
-        background: #2563eb;
-        color: white;
-        padding: 14px 18px;
-        border-radius: 16px 16px 4px 16px;
-        margin-bottom: 20px;
-        max-width: 75%;
-        float: right;
-        clear: both;
-        font-size: 0.95rem;
-        line-height: 1.5;
-        box-shadow: 0 4px 20px rgba(37, 99, 235, 0.15);
+        background: #2563eb; color: white; padding: 14px 18px;
+        border-radius: 16px 16px 4px 16px; margin-bottom: 20px;
+        max-width: 75%; float: right; clear: both; font-size: 0.95rem;
     }
     
     .assistant-bubble {
-        background: #1e293b;
-        color: #f8fafc;
-        padding: 14px 18px;
-        border-radius: 16px 16px 16px 4px;
-        margin-bottom: 20px;
-        max-width: 80%;
-        float: left;
-        clear: both;
-        border: 1px solid #334155;
-        font-size: 0.95rem;
-        line-height: 1.5;
+        background: #1e293b; color: #f8fafc; padding: 14px 18px;
+        border-radius: 16px 16px 16px 4px; margin-bottom: 20px;
+        max-width: 80%; float: left; clear: both; border: 1px solid #334155; font-size: 0.95rem;
     }
     
-    /* Sidebar Sophistication */
     section[data-testid="stSidebar"] {
-        background-color: #0f172a !important;
-        border-right: 1px solid #1e293b;
+        background-color: #0f172a !important; border-right: 1px solid #1e293b;
     }
     
-    /* Minimalist Inputs */
-    .stTextInput>div>div>input {
-        background-color: #1e293b !important;
-        color: white !important;
-        border: 1px solid #334155 !important;
-        border-radius: 8px !important;
-    }
-    
-    /* Primary Action Buttons */
     .stButton>button {
-        background-color: #2563eb;
-        color: white;
-        border: none;
-        border-radius: 6px;
-        padding: 0.5rem 1rem;
-        font-weight: 500;
-        transition: all 0.2s ease;
+        background-color: #2563eb; color: white; border: none;
+        border-radius: 6px; padding: 0.5rem 1rem; font-weight: 500;
     }
     
-    .stButton>button:hover {
-        background-color: #1d4ed8;
-        border-color: #1d4ed8;
-    }
-
-    /* Remove Streamlit Branding */
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    header {visibility: hidden;}
+    #MainMenu, footer, header {visibility: hidden;}
 </style>
 """, unsafe_allow_html=True)
 
 # Session state initialization
 if "messages" not in st.session_state:
     try:
-        resp = requests.get(f"{API_URL}/chat/history", timeout=2)
+        resp = requests.get(f"{BACKEND_URL}/chat/history", timeout=2)
         st.session_state.messages = resp.json() if resp.status_code == 200 else []
     except:
         st.session_state.messages = []
@@ -106,7 +59,7 @@ if "auto_play" not in st.session_state:
 
 def play_audio(text):
     try:
-        resp = requests.post(f"{API_URL}/chat/voice-output", json={"text": text}, timeout=10)
+        resp = requests.post(f"{BACKEND_URL}/chat/voice-output", json={"text": text}, timeout=10)
         if resp.status_code == 200:
             audio_base64 = base64.b64encode(resp.content).decode("utf-8")
             st.markdown(f'<audio autoplay="true" src="data:audio/mp3;base64,{audio_base64}">', unsafe_allow_html=True)
@@ -115,40 +68,26 @@ def play_audio(text):
 
 # Sidebar
 with st.sidebar:
-    st.title("System Console")
-    
-    # Elegant Connection Manager
-    with st.expander("Network Configuration", expanded=(st.session_state.API_URL == "http://localhost:8000")):
-        new_url = st.text_input("Backend Endpoint", value=st.session_state.API_URL)
-        if new_url != st.session_state.API_URL:
-            st.session_state.API_URL = new_url
-            st.rerun()
-        
-        try:
-            requests.get(f"{st.session_state.API_URL}/documents", timeout=1)
-            st.success("Synchronized")
-        except:
-            st.error("Offline")
-            st.caption("Enter the production Backend Endpoint above.")
-
+    st.title("System Control")
     st.divider()
-    st.subheader("Knowledge Repository")
+    st.subheader("Document Repository")
     
     uploaded_files = st.file_uploader("Index Documents", type=["pdf", "docx", "txt", "md"], accept_multiple_files=True, label_visibility="collapsed")
     if uploaded_files:
         for uploaded_file in uploaded_files:
             with st.spinner(f"Indexing {uploaded_file.name}..."):
                 files = {"file": (uploaded_file.name, uploaded_file.getvalue())}
-                resp = requests.post(f"{API_URL}/upload", files=files)
+                resp = requests.post(f"{BACKEND_URL}/upload", files=files)
                 if resp.status_code == 200:
                     st.toast(f"Indexed: {uploaded_file.name}")
                 else:
-                    st.error(f"Error: {uploaded_file.name}")
+                    st.error(f"Error indexing {uploaded_file.name}")
 
     st.divider()
     
+    # Automatic Document List
     try:
-        docs_resp = requests.get(f"{API_URL}/documents", timeout=2)
+        docs_resp = requests.get(f"{BACKEND_URL}/documents", timeout=2)
         if docs_resp.status_code == 200:
             docs = docs_resp.json()
             if docs:
@@ -156,41 +95,42 @@ with st.sidebar:
                     col1, col2 = st.columns([5, 1])
                     col1.caption(f" {doc['doc_name']}")
                     if col2.button("×", key=f"del_{doc['doc_name']}"):
-                        requests.delete(f"{API_URL}/documents/{doc['doc_name']}")
+                        requests.delete(f"{BACKEND_URL}/documents/{doc['doc_name']}")
                         st.rerun()
             else:
-                st.caption("No active documents indexed.")
+                st.caption("No documents currently indexed.")
     except:
-        pass
+        st.error("Engine Connection Offline")
 
     st.divider()
-    st.subheader("Voice Parameters")
+    st.subheader("Configuration")
     st.session_state.auto_play = st.toggle("Voice Synthesis Output", value=st.session_state.auto_play)
     
-    st.divider()
-    if st.button("Initialize Fresh Session", use_container_width=True):
-        requests.post(f"{API_URL}/chat/clear")
+    if st.button("Reset Session", use_container_width=True):
+        try:
+            requests.post(f"{BACKEND_URL}/chat/clear")
+        except: pass
         st.session_state.messages = []
         st.rerun()
 
 # Main Interface
 st.header("Intelligence Interface")
 
-# Document availability check
+# Context Selection
 try:
-    docs_resp = requests.get(f"{API_URL}/documents", timeout=2)
+    docs_resp = requests.get(f"{BACKEND_URL}/documents", timeout=2)
     docs = docs_resp.json() if docs_resp.status_code == 200 else []
 except:
     docs = []
 
 if not docs:
-    st.warning("Please index documents in the System Console to begin analysis.")
+    st.info("Awaiting document upload for context initialization.")
 else:
     doc_options = ["Universal Context"] + [d['doc_name'] for d in docs]
-    selected_doc = st.selectbox("Focus Scope", doc_options)
+    selected_doc = st.selectbox("Analysis Scope", doc_options)
     filter_doc = None if selected_doc == "Universal Context" else selected_doc
 
-    # Communication Thread
+    # Chat Thread
     for i, msg in enumerate(st.session_state.messages):
         role, content = msg["role"], msg["content"]
         if role == "user":
@@ -206,22 +146,20 @@ else:
     with c1:
         user_input = st.text_input("Consult internal knowledge...", key="text_input", label_visibility="collapsed")
     with c2:
-        audio_bytes = audio_recorder(text="", icon_size="2x", neutral_color="#2563eb")
+        audio_stream = audio_recorder(text="", icon_size="2x", neutral_color="#2563eb")
     with c3:
-        if st.button("Run", use_container_width=True) or (user_input and not audio_bytes):
-            pass # Logic handled below
+        send_trigger = st.button("Analyze", use_container_width=True)
 
-    if (user_input and not audio_bytes and st.session_state.get('last_input') != user_input) or audio_bytes:
-        st.session_state.last_input = user_input
+    if (send_trigger and user_input) or audio_stream:
         payload = {"query": user_input, "filter_doc": filter_doc}
         
-        if audio_bytes:
+        if audio_stream:
             with st.spinner("Processing Signal..."):
-                files = {"audio": ("signal.wav", audio_bytes, "audio/wav")}
-                resp = requests.post(f"{API_URL}/chat/voice-input", files=files)
+                files = {"audio": ("signal.wav", audio_stream, "audio/wav")}
+                resp = requests.post(f"{BACKEND_URL}/chat/voice-input", files=files)
         else:
             with st.spinner("Analyzing..."):
-                resp = requests.post(f"{API_URL}/chat", json=payload)
+                resp = requests.post(f"{BACKEND_URL}/chat", json=payload)
             
         if resp.status_code == 200:
             result = resp.json()
