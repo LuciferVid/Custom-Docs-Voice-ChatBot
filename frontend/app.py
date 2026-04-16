@@ -126,46 +126,64 @@ with st.sidebar:
         files_to_sync = [f for f in uploaded_files if not any(d['doc_name'] == f.name for d in st.session_state.docs)]
         
         if files_to_sync:
-            st.warning(f"{len(files_to_sync)} file(s) awaiting synchronization.")
+            st.warning(f"📡 {len(files_to_sync)} file(s) awaiting intelligence sync.")
             if st.button("🚀 Sync to Intelligence", use_container_width=True):
                 for f in files_to_sync:
-                    with st.spinner(f"Indexing {f.name}..."):
+                    with st.spinner(f"Synchronizing {f.name}..."):
                         try:
-                            files = {"file": (f.name, f.getvalue())}
+                            # Explicitly check for empty content
+                            content = f.getvalue()
+                            if not content:
+                                st.error(f"❌ {f.name} is empty.")
+                                continue
+                                
+                            files = {"file": (f.name, content)}
                             resp = requests.post(f"{BACKEND_URL}/upload", files=files, timeout=60)
                             if resp.status_code == 200:
-                                st.toast(f"Synchronized: {f.name}")
+                                st.toast(f"✅ Indexed: {f.name}")
                             else:
-                                st.error(f"Error: {resp.json().get('detail', 'Upload Rejected')}")
+                                err_msg = resp.json().get('detail', 'System Rejected')
+                                st.error(f"❌ Failed: {err_msg}")
                         except Exception as e:
-                            st.error(f"Network Error: {str(e)}")
+                            st.error(f"⚠️ Network Signal Lost: {str(e)}")
                 st.rerun()
 
     st.divider()
     
-    # Automatic Document List from Shared State
+    # Active Intelligence Context
     if st.session_state.docs:
+        st.caption("Active Intelligence Context:")
         for doc in st.session_state.docs:
             col1, col2 = st.columns([5, 1])
-            col1.caption(f" {doc['doc_name']}")
-            if col2.button("×", key=f"del_{doc['doc_name']}"):
-                requests.delete(f"{BACKEND_URL}/documents/{doc['doc_name']}")
-                if doc['doc_name'] in st.session_state.processed_files:
-                    st.session_state.processed_files.remove(doc['doc_name'])
+            col1.markdown(f"🔹 **{doc['doc_name']}**")
+            if col2.button("🗑️", key=f"del_{doc['doc_name']}"):
+                requests.delete(f"{BACKEND_URL}/documents/{doc['doc_name']}", timeout=15)
                 st.rerun()
     else:
-        st.caption("No documents currently indexed.")
+        st.caption("No intelligence context currently loaded.")
 
     st.divider()
-    st.subheader("Configuration")
+    st.subheader("System Safety")
     st.session_state.auto_play = st.toggle("Voice Synthesis Output", value=st.session_state.auto_play)
     
-    if st.button("Reset Session", use_container_width=True):
-        try:
-            requests.post(f"{BACKEND_URL}/chat/clear")
-        except: pass
-        st.session_state.messages = []
-        st.rerun()
+    col_a, col_b = st.columns(2)
+    with col_a:
+        if st.button("Reset Chat", use_container_width=True):
+            try: requests.post(f"{BACKEND_URL}/chat/clear", timeout=10)
+            except: pass
+            st.session_state.messages = []
+            st.rerun()
+    with col_b:
+        if st.button("Hard Reset", use_container_width=True, help="Purge all indexed documents and clear memory"):
+            try:
+                # Delete all docs found
+                for doc in st.session_state.docs:
+                    requests.delete(f"{BACKEND_URL}/documents/{doc['doc_name']}", timeout=10)
+                requests.post(f"{BACKEND_URL}/chat/clear", timeout=10)
+            except: pass
+            st.session_state.messages = []
+            st.session_state.docs = []
+            st.rerun()
 
 # Main Interface
 st.header("Intelligence Interface")

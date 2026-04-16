@@ -13,19 +13,21 @@ def get_client():
 
 def generate_embedding(text: str) -> list[float]:
     """
-    Generates an embedding using Gemini's Cloud API (Free & Stable).
+    Generates an embedding using Gemini's Cloud API.
     """
     client = get_client()
     try:
-        # text-embedding-004 is state-of-the-art and free
         result = client.models.embed_content(
             model="text-embedding-004",
             contents=text
         )
-        return result.embeddings[0].values
+        # Handle different response formats in SDK
+        if hasattr(result.embeddings[0], 'values'):
+            return result.embeddings[0].values
+        return result.embeddings[0]
     except Exception as e:
         logger.error(f"Cloud Embedding Error: {e}")
-        return []
+        raise ValueError(f"Failed to generate embedding: {str(e)}")
 
 def generate_embeddings_batch(texts: list[str]) -> list[list[float]]:
     """
@@ -40,7 +42,14 @@ def generate_embeddings_batch(texts: list[str]) -> list[list[float]]:
             model="text-embedding-004",
             contents=texts
         )
-        return [e.values for e in result.embeddings]
+        # Robust parsing for list of Embedding objects
+        embeddings = []
+        for e in result.embeddings:
+            if hasattr(e, 'values'):
+                embeddings.append(e.values)
+            else:
+                embeddings.append(e)
+        return embeddings
     except Exception as e:
         logger.error(f"Cloud Batch Embedding Error: {e}")
-        return []
+        raise ValueError(f"Failed to generate batch embeddings: {str(e)}")

@@ -25,28 +25,25 @@ class FAISSVectorStore:
         self.load()
 
     def add_document(self, chunks: list[dict], doc_name: str):
+        """
+        Generates embeddings for chunks and adds them to the FAISS index.
+        """
         if not chunks:
             return
             
         texts = [chunk["text"] for chunk in chunks]
-        embeddings = generate_embeddings_batch(texts)
         
-        if not embeddings or not isinstance(embeddings, list):
-            logger.error(f"Failed to generate embeddings for {doc_name}")
-            return
-
         try:
+            # This will now raise ValueError if it fails
+            embeddings = generate_embeddings_batch(texts)
             embeddings_np = np.array(embeddings).astype('float32')
             
-            # Use 768 as the rock-solid default for Gemini text-embedding-004
-            dimension = 768
-            if len(embeddings_np.shape) >= 2:
-                dimension = embeddings_np.shape[1]
-            
+            # Dimension Validation
+            dimension = embeddings_np.shape[1]
             if self.index is None:
                 self.index = faiss.IndexFlatL2(dimension)
             elif self.index.d != dimension:
-                logger.warning(f"Dimension shift detected. Resetting index to {dimension}")
+                logger.warning(f"Dimension shift (Index: {self.index.d}, New: {dimension}). Brain Resetting.")
                 self.index = faiss.IndexFlatL2(dimension)
                 self.chunks = []
                 self.doc_registry = {}
@@ -59,11 +56,11 @@ class FAISSVectorStore:
                 "added_at": datetime.now().isoformat()
             }
             self.save()
-            logger.info(f"Successfully indexed {doc_name}")
+            logger.info(f"Successfully indexed {doc_name} with {len(chunks)} chunks.")
             
         except Exception as e:
-            logger.error(f"Fatal error during indexing: {e}")
-            raise Exception(f"Indexing engine error: {str(e)}")
+            logger.error(f"Indexing Engine Failure for {doc_name}: {e}")
+            raise Exception(f"Intelligence System Error: {str(e)}")
 
     def search(self, query: str, top_k: int = 5, filter_doc: str = None) -> list[dict]:
         if self.index is None:
