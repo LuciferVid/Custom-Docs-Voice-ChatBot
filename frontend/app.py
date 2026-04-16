@@ -136,21 +136,15 @@ with st.sidebar:
 # Main Interface
 st.header("Intelligence Interface")
 
-# Context Selection
-try:
-    docs_resp = requests.get(f"{BACKEND_URL}/documents", timeout=2)
-    docs = docs_resp.json() if docs_resp.status_code == 200 else []
-except:
-    docs = []
+# Context Selection & Chat UI (Now Always Visible)
+doc_options = ["Universal Context"] + [d['doc_name'] for d in st.session_state.docs]
+selected_doc = st.selectbox("Analysis Scope", doc_options if st.session_state.docs else ["Awaiting Documents..."])
+filter_doc = None if selected_doc in ["Universal Context", "Awaiting Documents..."] else selected_doc
 
-if not docs:
-    st.info("Awaiting document upload for context initialization.")
+# Chat Thread
+if not st.session_state.messages:
+    st.caption("Enter a query or record a signal to begin the deep analysis.")
 else:
-    doc_options = ["Universal Context"] + [d['doc_name'] for d in docs]
-    selected_doc = st.selectbox("Analysis Scope", doc_options)
-    filter_doc = None if selected_doc == "Universal Context" else selected_doc
-
-    # Chat Thread
     for i, msg in enumerate(st.session_state.messages):
         role, content = msg["role"], msg["content"]
         if role == "user":
