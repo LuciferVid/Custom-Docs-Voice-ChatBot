@@ -16,7 +16,7 @@ def load_pdf(file_path: str) -> list[dict]:
         with pdfplumber.open(file_path) as pdf:
             for i, page in enumerate(pdf.pages):
                 text = page.extract_text()
-                if text and len(text.strip()) >= 50:
+                if text and len(text.strip()) >= 10:
                     pages.append({
                         "text": text.strip(),
                         "page_number": i + 1,

@@ -2,8 +2,13 @@ import os
 import faiss
 import numpy as np
 import json
+import logging
 from datetime import datetime
 from ingestion.embeddings import generate_embeddings_batch, generate_embedding
+
+# Setup logging correctly
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 class FAISSVectorStore:
     def __init__(self, index_dir: str = "faiss_index/"):
@@ -20,122 +25,132 @@ class FAISSVectorStore:
         self.load()
 
     def add_document(self, chunks: list[dict], doc_name: str):
-        """
-        Generates embeddings for all chunks and adds them to the FAISS index.
-        """
+        if not chunks:
+            return
+            
         texts = [chunk["text"] for chunk in chunks]
         embeddings = generate_embeddings_batch(texts)
-        embeddings_np = np.array(embeddings).astype('float32')
         
-        dimension = embeddings_np.shape[1]
-        
-        if self.index is None:
-            self.index = faiss.IndexFlatL2(dimension)
-        elif self.index.d != dimension:
-            # Dimension mismatch (happens when switching models) - reset index
-            logger.warning(f"Dimension mismatch: Index={self.index.d}, Model={dimension}. Rebuilding index.")
-            self.index = faiss.IndexFlatL2(dimension)
-            # Re-generate embeddings for all previous chunks if needed, 
-            # but for now we'll just start fresh for safety
-            self.chunks = []
-            self.doc_registry = {}
+        if not embeddings or not isinstance(embeddings, list):
+            logger.error(f"Failed to generate embeddings for {doc_name}")
+            return
+
+        try:
+            embeddings_np = np.array(embeddings).astype('float32')
             
-        self.index.add(embeddings_np)
-        self.chunks.extend(chunks)
-        
-        self.doc_registry[doc_name] = {
-            "chunk_count": len(chunks),
-            "added_at": datetime.now().isoformat()
-        }
-        
-        self.save()
+            # Use 768 as the rock-solid default for Gemini text-embedding-004
+            dimension = 768
+            if len(embeddings_np.shape) >= 2:
+                dimension = embeddings_np.shape[1]
+            
+            if self.index is None:
+                self.index = faiss.IndexFlatL2(dimension)
+            elif self.index.d != dimension:
+                logger.warning(f"Dimension shift detected. Resetting index to {dimension}")
+                self.index = faiss.IndexFlatL2(dimension)
+                self.chunks = []
+                self.doc_registry = {}
+
+            self.index.add(embeddings_np)
+            self.chunks.extend(chunks)
+            
+            self.doc_registry[doc_name] = {
+                "chunk_count": len(chunks),
+                "added_at": datetime.now().isoformat()
+            }
+            self.save()
+            logger.info(f"Successfully indexed {doc_name}")
+            
+        except Exception as e:
+            logger.error(f"Fatal error during indexing: {e}")
+            raise Exception(f"Indexing engine error: {str(e)}")
 
     def search(self, query: str, top_k: int = 5, filter_doc: str = None) -> list[dict]:
-        """
-        Searches the FAISS index for the most relevant chunks.
-        """
         if self.index is None:
             return []
             
-        query_embedding = generate_embedding(query)
-        query_embedding_np = np.array([query_embedding]).astype('float32')
-        
-        # Search for more than top_k to allow for filtering
-        distances, indices = self.index.search(query_embedding_np, top_k * 2)
-        
-        results = []
-        for i in range(len(indices[0])):
-            idx = indices[0][i]
-            if idx == -1:
-                continue
+        try:
+            query_embedding = generate_embedding(query)
+            if not query_embedding:
+                return []
                 
-            chunk = self.chunks[idx].copy()
-            chunk["score"] = float(distances[0][i])
+            query_embedding_np = np.array([query_embedding]).astype('float32')
             
-            if filter_doc and chunk["source_file"] != filter_doc:
-                continue
-                
-            results.append(chunk)
-            if len(results) >= top_k:
-                break
-                
-        return results
+            # Ensure query match dimension
+            if query_embedding_np.shape[1] != self.index.d:
+                logger.error(f"Search dimension mismatch: {query_embedding_np.shape[1]} vs {self.index.d}")
+                return []
+
+            distances, indices = self.index.search(query_embedding_np, top_k * 2)
+            
+            results = []
+            if len(indices) > 0:
+                for i in range(len(indices[0])):
+                    idx = indices[0][i]
+                    if idx == -1 or idx >= len(self.chunks):
+                        continue
+                        
+                    chunk = self.chunks[idx].copy()
+                    chunk["score"] = float(distances[0][i])
+                    
+                    if filter_doc and chunk["source_file"] != filter_doc:
+                        continue
+                        
+                    results.append(chunk)
+                    if len(results) >= top_k:
+                        break
+            return results
+        except Exception as e:
+            logger.error(f"Search failure: {e}")
+            return []
 
     def delete_document(self, doc_name: str):
-        """
-        Removes all chunks belonging to a document and rebuilds the index.
-        """
         if doc_name not in self.doc_registry:
             return
             
-        # Filter chunks
         self.chunks = [c for c in self.chunks if c["source_file"] != doc_name]
         del self.doc_registry[doc_name]
         
-        # Rebuild index
         if not self.chunks:
             self.index = None
         else:
             texts = [chunk["text"] for chunk in self.chunks]
             embeddings = generate_embeddings_batch(texts)
-            embeddings_np = np.array(embeddings).astype('float32')
-            dimension = embeddings_np.shape[1]
-            self.index = faiss.IndexFlatL2(dimension)
-            self.index.add(embeddings_np)
+            if embeddings:
+                embeddings_np = np.array(embeddings).astype('float32')
+                dimension = embeddings_np.shape[1] if len(embeddings_np.shape) >= 2 else 768
+                self.index = faiss.IndexFlatL2(dimension)
+                self.index.add(embeddings_np)
+            else:
+                self.index = None
             
         self.save()
 
     def save(self):
-        """
-        Saves the FAISS index and metadata to disk.
-        """
         if self.index is not None:
             faiss.write_index(self.index, self.index_path)
-            
-        metadata = {
-            "chunks": self.chunks,
-            "doc_registry": self.doc_registry
-        }
+        metadata = {"chunks": self.chunks, "doc_registry": self.doc_registry}
         with open(self.metadata_path, 'w') as f:
             json.dump(metadata, f)
 
     def load(self):
-        """
-        Loads the FAISS index and metadata from disk.
-        """
         if os.path.exists(self.index_path):
-            self.index = faiss.read_index(self.index_path)
+            try:
+                self.index = faiss.read_index(self.index_path)
+            except:
+                self.index = None
             
         if os.path.exists(self.metadata_path):
             with open(self.metadata_path, 'r') as f:
-                metadata = json.load(f)
-                self.chunks = metadata.get("chunks", [])
-                self.doc_registry = metadata.get("doc_registry", {})
+                try:
+                    metadata = json.load(f)
+                    self.chunks = metadata.get("chunks", [])
+                    self.doc_registry = metadata.get("doc_registry", {})
+                except:
+                    self.chunks = []
+                    self.doc_registry = {}
                 
     def get_documents(self) -> list[dict]:
-        """
-        Returns a list of registered documents.
-        """
         docs = []
         for name, info in self.doc_registry.items():
             docs.append({
