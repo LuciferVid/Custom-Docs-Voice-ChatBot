@@ -33,7 +33,7 @@ def get_answer(query: str, vector_store, memory, gemini_client, filter_doc: str 
     try:
         prompt = RAG_PROMPT.format(history=history, context=context, query=rephrased_query)
         response = gemini_client.models.generate_content(
-            model="gemini-2.0-flash",
+            model="gemini-1.5-flash",
             contents=prompt,
             config={"temperature": 0}
         )
