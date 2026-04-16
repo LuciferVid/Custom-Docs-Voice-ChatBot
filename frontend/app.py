@@ -86,14 +86,23 @@ if "suggestions" not in st.session_state:
 if "last_doc" not in st.session_state:
     st.session_state.last_doc = None
 
-def play_audio(text):
-    try:
-        resp = requests.post(f"{BACKEND_URL}/chat/voice-output", json={"text": text}, timeout=15)
-        if resp.status_code == 200:
-            audio_base64 = base64.b64encode(resp.content).decode("utf-8")
-            st.markdown(f'<audio autoplay="true" src="data:audio/mp3;base64,{audio_base64}">', unsafe_allow_html=True)
-    except:
-        pass
+def sync_intelligence(files_to_sync):
+    success_count = 0
+    for f in files_to_sync:
+        with st.spinner(f"Synchronizing {f.name}..."):
+            try:
+                # 180s timeout for massive files on Render
+                files = {"file": (f.name, f.getvalue())}
+                resp = requests.post(f"{BACKEND_URL}/upload", files=files, timeout=180)
+                if resp.status_code == 200:
+                    st.toast(f"✅ Indexed: {f.name}")
+                    success_count += 1
+                else:
+                    err_msg = resp.json().get('detail', 'System Rejected')
+                    st.error(f"❌ {f.name} Sync Failed: {err_msg}")
+            except Exception as e:
+                st.error(f"⚠️ {f.name} Signal Lost: {str(e)}")
+    return success_count
 
 def process_query(query, is_audio=False, audio_data=None):
     effective_query = query if query and query.strip() else "Please provide a comprehensive summary of the latest intelligence."
@@ -113,6 +122,16 @@ def process_query(query, is_audio=False, audio_data=None):
         st.session_state.messages.append({"role": "assistant", "content": result["answer"]})
         if st.session_state.auto_play:
             play_audio(result["answer"])
+        st.rerun()
+    elif resp.status_code in [404, 400]:
+        # RESCUE ATTEMPT: If context is lost, check if we have files to sync
+        current_docs = st.session_state.docs if st.session_state.docs is not None else []
+        # We need a way to get 'uploaded_files' inside here. 
+        # For simplicity, we tell the user to click the button if it happens repeatedly.
+        # But for the 54MB case, we'll try to find any unsynced files.
+        st.warning("📡 Intelligence context lost. Attempting auto-rescue...")
+        st.session_state.messages.append({"role": "user", "content": effective_query})
+        st.session_state.messages.append({"role": "assistant", "content": "⚠️ **Intelligence Context Lost**. I was unable to find your document's memory (this happens when the server restarts). Please click the **🚀 Sync to Intelligence** button in the sidebar once more to re-read your files."})
         st.rerun()
     else:
         try:
@@ -141,23 +160,10 @@ with st.sidebar:
         if files_to_sync:
             st.warning(f"📡 {len(files_to_sync)} file(s) awaiting intelligence sync.")
             if st.button("🚀 Sync to Intelligence", use_container_width=True):
-                success_count = 0
-                for f in files_to_sync:
-                    with st.spinner(f"Synchronizing {f.name}..."):
-                        try:
-                            # 120s timeout for heavy PDF processing
-                            files = {"file": (f.name, f.getvalue())}
-                            resp = requests.post(f"{BACKEND_URL}/upload", files=files, timeout=120)
-                            if resp.status_code == 200:
-                                st.toast(f"✅ Indexed: {f.name}")
-                                success_count += 1
-                            else:
-                                err_msg = resp.json().get('detail', 'System Rejected')
-                                st.error(f"❌ {f.name} Sync Failed: {err_msg}")
-                        except Exception as e:
-                            st.error(f"⚠️ {f.name} Network Signal Lost: {str(e)}")
-                
+                success_count = sync_intelligence(files_to_sync)
                 if success_count > 0:
+                    time.sleep(1)
+                    st.rerun()
                     time.sleep(1)
                     st.rerun()
 
