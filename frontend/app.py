@@ -67,6 +67,9 @@ try:
 except:
     st.session_state.docs = []
 
+if "currently_syncing" not in st.session_state:
+    st.session_state.currently_syncing = set()
+
 if "suggestions" not in st.session_state:
     st.session_state.suggestions = []
 if "last_doc" not in st.session_state:
@@ -110,28 +113,33 @@ with st.sidebar:
     uploaded_files = st.file_uploader("Index Documents", type=["pdf", "docx", "txt", "md"], accept_multiple_files=True, label_visibility="collapsed")
     if uploaded_files:
         for uploaded_file in uploaded_files:
-            # ONLY skip if the server physically reports the doc is indexed
-            is_indexed = any(d['doc_name'] == uploaded_file.name for d in st.session_state.docs)
-            if is_indexed:
+            file_name = uploaded_file.name
+            
+            # 1. Check if physically on server
+            is_indexed = any(d['doc_name'] == file_name for d in st.session_state.docs)
+            
+            # 2. Check if we are ALREADY syncing it to avoid loop
+            if is_indexed or file_name in st.session_state.currently_syncing:
                 continue
                 
-            with st.spinner(f"Synchronizing {uploaded_file.name}..."):
-                try:
-                    files = {"file": (uploaded_file.name, uploaded_file.getvalue())}
-                    resp = requests.post(f"{BACKEND_URL}/upload", files=files, timeout=60)
-                    if resp.status_code == 200:
-                        st.session_state.processed_files.add(uploaded_file.name)
-                        st.toast(f"Success: {uploaded_file.name}")
-                        st.rerun()
-                    else:
-                        error_detail = "Unknown Error"
-                        try:
-                            error_detail = resp.json().get("detail", "Unknown backend error")
-                        except: pass
-                        st.error(f"Indexing Failed: {error_detail}")
-                except Exception as e:
-                    st.error("Engine Connection Offline")
-                    st.caption("The backend is likely still deploying or waking up. Please wait 1 minute.")
+            with st.sidebar:
+                with st.spinner(f"📡 Syncing {file_name}..."):
+                    try:
+                        st.session_state.currently_syncing.add(file_name)
+                        files = {"file": (file_name, uploaded_file.getvalue())}
+                        resp = requests.post(f"{BACKEND_URL}/upload", files=files, timeout=60)
+                        
+                        if resp.status_code == 200:
+                            st.toast(f"Synchronized: {file_name}")
+                            # Give server a tiny breath to commit index
+                            time.sleep(0.5) 
+                            st.rerun()
+                        else:
+                            st.error(f"Sync Failed: {file_name}")
+                            st.session_state.currently_syncing.remove(file_name)
+                    except Exception as e:
+                        st.session_state.currently_syncing.remove(file_name)
+                        st.error(f"Link Error: {str(e)}")
 
     st.divider()
     
