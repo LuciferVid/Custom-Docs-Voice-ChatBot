@@ -154,31 +154,31 @@ else:
             if st.button("Listen", key=f"play_{i}"):
                 play_audio(content)
 
-    # Input Control
-    st.write("---")
-    c1, c2, c3 = st.columns([10, 1, 1], vertical_alignment="bottom")
-    with c1:
-        user_input = st.text_input("Consult internal knowledge...", key="text_input", label_visibility="collapsed")
-    with c2:
-        audio_stream = audio_recorder(text="", icon_size="2x", neutral_color="#2563eb")
-    with c3:
-        send_trigger = st.button("Analyze", use_container_width=True)
+# Input Control (Always Visible)
+st.write("---")
+c1, c2, c3 = st.columns([10, 1, 1], vertical_alignment="bottom")
+with c1:
+    user_input = st.text_input("Consult internal knowledge...", key="text_input", label_visibility="collapsed")
+with c2:
+    audio_stream = audio_recorder(text="", icon_size="2x", neutral_color="#2563eb")
+with c3:
+    send_trigger = st.button("Analyze", use_container_width=True)
 
-    if (send_trigger and user_input) or audio_stream:
-        payload = {"query": user_input, "filter_doc": filter_doc}
+if (send_trigger and user_input) or audio_stream:
+    payload = {"query": user_input, "filter_doc": filter_doc}
+    
+    if audio_stream:
+        with st.spinner("Processing Signal..."):
+            files = {"audio": ("signal.wav", audio_stream, "audio/wav")}
+            resp = requests.post(f"{BACKEND_URL}/chat/voice-input", files=files)
+    else:
+        with st.spinner("Analyzing..."):
+            resp = requests.post(f"{BACKEND_URL}/chat", json=payload)
         
-        if audio_stream:
-            with st.spinner("Processing Signal..."):
-                files = {"audio": ("signal.wav", audio_stream, "audio/wav")}
-                resp = requests.post(f"{BACKEND_URL}/chat/voice-input", files=files)
-        else:
-            with st.spinner("Analyzing..."):
-                resp = requests.post(f"{BACKEND_URL}/chat", json=payload)
-            
-        if resp.status_code == 200:
-            result = resp.json()
-            st.session_state.messages.append({"role": "user", "content": result.get("transcription", user_input)})
-            st.session_state.messages.append({"role": "assistant", "content": result["answer"]})
-            if st.session_state.auto_play:
-                play_audio(result["answer"])
-            st.rerun()
+    if resp.status_code == 200:
+        result = resp.json()
+        st.session_state.messages.append({"role": "user", "content": result.get("transcription", user_input)})
+        st.session_state.messages.append({"role": "assistant", "content": result["answer"]})
+        if st.session_state.auto_play:
+            play_audio(result["answer"])
+        st.rerun()
