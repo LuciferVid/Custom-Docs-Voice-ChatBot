@@ -56,6 +56,16 @@ if "messages" not in st.session_state:
 if "auto_play" not in st.session_state:
     st.session_state.auto_play = True
 
+if "processed_files" not in st.session_state:
+    st.session_state.processed_files = set()
+
+# Global Document Fetch (Ensures sync across all components)
+try:
+    docs_resp = requests.get(f"{BACKEND_URL}/documents", timeout=2)
+    st.session_state.docs = docs_resp.json() if docs_resp.status_code == 200 else []
+except:
+    st.session_state.docs = []
+
 def play_audio(text):
     try:
         resp = requests.post(f"{BACKEND_URL}/chat/voice-output", json={"text": text}, timeout=10)
@@ -74,16 +84,17 @@ with st.sidebar:
     uploaded_files = st.file_uploader("Index Documents", type=["pdf", "docx", "txt", "md"], accept_multiple_files=True, label_visibility="collapsed")
     if uploaded_files:
         for uploaded_file in uploaded_files:
-            # Prevent re-uploading if already in the list
-            if any(d['doc_name'] == uploaded_file.name for d in (docs if 'docs' in locals() else [])):
+            # Check if indexed or already processed in this session
+            is_indexed = any(d['doc_name'] == uploaded_file.name for d in st.session_state.docs)
+            if is_indexed or uploaded_file.name in st.session_state.processed_files:
                 continue
                 
             with st.spinner(f"Synchronizing {uploaded_file.name}..."):
                 try:
                     files = {"file": (uploaded_file.name, uploaded_file.getvalue())}
-                    # Higher timeout for model loading on Render
                     resp = requests.post(f"{BACKEND_URL}/upload", files=files, timeout=60)
                     if resp.status_code == 200:
+                        st.session_state.processed_files.add(uploaded_file.name)
                         st.toast(f"Success: {uploaded_file.name}")
                         st.rerun()
                     else:
@@ -92,29 +103,24 @@ with st.sidebar:
                             error_detail = resp.json().get("detail", "Unknown backend error")
                         except: pass
                         st.error(f"Indexing Failed: {error_detail}")
-                        st.caption(f"File: {uploaded_file.name}")
                 except Exception as e:
                     st.error("Engine Connection Offline")
                     st.caption("The backend is likely still deploying or waking up. Please wait 1 minute.")
 
     st.divider()
     
-    # Automatic Document List
-    try:
-        docs_resp = requests.get(f"{BACKEND_URL}/documents", timeout=2)
-        if docs_resp.status_code == 200:
-            docs = docs_resp.json()
-            if docs:
-                for doc in docs:
-                    col1, col2 = st.columns([5, 1])
-                    col1.caption(f" {doc['doc_name']}")
-                    if col2.button("×", key=f"del_{doc['doc_name']}"):
-                        requests.delete(f"{BACKEND_URL}/documents/{doc['doc_name']}")
-                        st.rerun()
-            else:
-                st.caption("No documents currently indexed.")
-    except:
-        st.error("Engine Connection Offline")
+    # Automatic Document List from Shared State
+    if st.session_state.docs:
+        for doc in st.session_state.docs:
+            col1, col2 = st.columns([5, 1])
+            col1.caption(f" {doc['doc_name']}")
+            if col2.button("×", key=f"del_{doc['doc_name']}"):
+                requests.delete(f"{BACKEND_URL}/documents/{doc['doc_name']}")
+                if doc['doc_name'] in st.session_state.processed_files:
+                    st.session_state.processed_files.remove(doc['doc_name'])
+                st.rerun()
+    else:
+        st.caption("No documents currently indexed.")
 
     st.divider()
     st.subheader("Configuration")
