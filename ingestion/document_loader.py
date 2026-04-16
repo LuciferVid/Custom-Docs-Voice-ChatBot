@@ -1,6 +1,6 @@
 import os
 import pdfplumber
-import PyPDF2
+import pypdf
 from docx import Document
 import logging
 
@@ -25,11 +25,11 @@ def load_pdf(file_path: str) -> list[dict]:
     except Exception as e:
         logger.error(f"pdfplumber failed for {file_path}: {e}")
 
-    # Strategy 2: PyPDF2 (Failover)
+    # Strategy 2: pypdf (Failover)
     if not pages:
         try:
             with open(file_path, 'rb') as f:
-                reader = PyPDF2.PdfReader(f)
+                reader = pypdf.PdfReader(f)
                 for i, page in enumerate(reader.pages):
                     page_text = page.extract_text()
                     if page_text:
@@ -39,7 +39,7 @@ def load_pdf(file_path: str) -> list[dict]:
                             "source_file": doc_name
                         })
         except Exception as e:
-            logger.error(f"PyPDF2 failed for {file_path}: {e}")
+            logger.error(f"pypdf failed for {file_path}: {e}")
 
     return pages
 

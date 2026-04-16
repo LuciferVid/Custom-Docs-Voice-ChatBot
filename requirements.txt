@@ -1,5 +1,5 @@
 faiss-cpu
-pypdf2
+pypdf
 pdfplumber
 python-docx
 fastapi

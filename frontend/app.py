@@ -116,6 +116,7 @@ def process_query(query, is_audio=False, audio_data=None):
 # Sidebar
 with st.sidebar:
     st.title("System Control")
+    st.caption(f"Backend: {BACKEND_URL}")
     st.divider()
     st.subheader("Document Repository")
     
@@ -140,15 +141,17 @@ with st.sidebar:
                         
                         if resp.status_code == 200:
                             st.toast(f"Synchronized: {file_name}")
-                            # Give server a tiny breath to commit index
                             time.sleep(0.5) 
                             st.rerun()
                         else:
-                            st.error(f"Sync Failed: {file_name}")
+                            detail = "Unknown Error"
+                            try: detail = resp.json().get("detail", "Server Rejected")
+                            except: pass
+                            st.error(f"Sync Failed: {detail}")
                             st.session_state.currently_syncing.remove(file_name)
                     except Exception as e:
                         st.session_state.currently_syncing.remove(file_name)
-                        st.error(f"Link Error: {str(e)}")
+                        st.error(f"Connection Lost: {str(e)}")
 
     st.divider()
     
