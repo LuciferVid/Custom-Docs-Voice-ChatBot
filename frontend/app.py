@@ -110,9 +110,9 @@ with st.sidebar:
     uploaded_files = st.file_uploader("Index Documents", type=["pdf", "docx", "txt", "md"], accept_multiple_files=True, label_visibility="collapsed")
     if uploaded_files:
         for uploaded_file in uploaded_files:
-            # Check if indexed or already processed in this session
+            # ONLY skip if the server physically reports the doc is indexed
             is_indexed = any(d['doc_name'] == uploaded_file.name for d in st.session_state.docs)
-            if is_indexed or uploaded_file.name in st.session_state.processed_files:
+            if is_indexed:
                 continue
                 
             with st.spinner(f"Synchronizing {uploaded_file.name}..."):
