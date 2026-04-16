@@ -68,13 +68,13 @@ if "auto_play" not in st.session_state:
 if "processed_files" not in st.session_state:
     st.session_state.processed_files = set()
 
-# Global Document Fetch (Ensures sync across all components)
+# Global Document Fetch (High Timeout for Render)
 try:
-    # Use timestamp to bust any potential caching
-    docs_resp = requests.get(f"{BACKEND_URL}/documents?t={time.time()}", timeout=2)
+    docs_resp = requests.get(f"{BACKEND_URL}/documents?t={time.time()}", timeout=15)
     st.session_state.docs = docs_resp.json() if docs_resp.status_code == 200 else []
-except:
+except Exception as e:
     st.session_state.docs = []
+    st.sidebar.error(f"Signal Timeout: Backend is waking up... {str(e)}")
 
 if "currently_syncing" not in st.session_state:
     st.session_state.currently_syncing = set()
@@ -86,7 +86,7 @@ if "last_doc" not in st.session_state:
 
 def play_audio(text):
     try:
-        resp = requests.post(f"{BACKEND_URL}/chat/voice-output", json={"text": text}, timeout=10)
+        resp = requests.post(f"{BACKEND_URL}/chat/voice-output", json={"text": text}, timeout=15)
         if resp.status_code == 200:
             audio_base64 = base64.b64encode(resp.content).decode("utf-8")
             st.markdown(f'<audio autoplay="true" src="data:audio/mp3;base64,{audio_base64}">', unsafe_allow_html=True)
@@ -100,10 +100,10 @@ def process_query(query, is_audio=False, audio_data=None):
     if is_audio and audio_data:
         with st.spinner("Processing Signal..."):
             files = {"audio": ("signal.wav", audio_data, "audio/wav")}
-            resp = requests.post(f"{BACKEND_URL}/chat/voice-input", files=files)
+            resp = requests.post(f"{BACKEND_URL}/chat/voice-input", files=files, timeout=15)
     else:
         with st.spinner("Analyzing Intelligence..." if not (query and query.strip()) else "Finding Answer..."):
-            resp = requests.post(f"{BACKEND_URL}/chat", json=payload)
+            resp = requests.post(f"{BACKEND_URL}/chat", json=payload, timeout=15)
         
     if resp.status_code == 200:
         result = resp.json()
@@ -116,42 +116,30 @@ def process_query(query, is_audio=False, audio_data=None):
 # Sidebar
 with st.sidebar:
     st.title("System Control")
-    st.caption(f"Backend: {BACKEND_URL}")
+    st.caption(f"Backend Status: {'🟢 Online' if st.session_state.docs is not None else '🔴 Connecting...'}")
     st.divider()
-    st.subheader("Document Repository")
     
+    st.subheader("Document Repository")
     uploaded_files = st.file_uploader("Index Documents", type=["pdf", "docx", "txt", "md"], accept_multiple_files=True, label_visibility="collapsed")
+    
     if uploaded_files:
-        for uploaded_file in uploaded_files:
-            file_name = uploaded_file.name
-            
-            # 1. Check if physically on server
-            is_indexed = any(d['doc_name'] == file_name for d in st.session_state.docs)
-            
-            # 2. Check if we are ALREADY syncing it to avoid loop
-            if is_indexed or file_name in st.session_state.currently_syncing:
-                continue
-                
-            with st.sidebar:
-                with st.spinner(f"📡 Syncing {file_name}..."):
-                    try:
-                        st.session_state.currently_syncing.add(file_name)
-                        files = {"file": (file_name, uploaded_file.getvalue())}
-                        resp = requests.post(f"{BACKEND_URL}/upload", files=files, timeout=60)
-                        
-                        if resp.status_code == 200:
-                            st.toast(f"Synchronized: {file_name}")
-                            time.sleep(0.5) 
-                            st.rerun()
-                        else:
-                            detail = "Unknown Error"
-                            try: detail = resp.json().get("detail", "Server Rejected")
-                            except: pass
-                            st.error(f"Sync Failed: {detail}")
-                            st.session_state.currently_syncing.remove(file_name)
-                    except Exception as e:
-                        st.session_state.currently_syncing.remove(file_name)
-                        st.error(f"Connection Lost: {str(e)}")
+        files_to_sync = [f for f in uploaded_files if not any(d['doc_name'] == f.name for d in st.session_state.docs)]
+        
+        if files_to_sync:
+            st.warning(f"{len(files_to_sync)} file(s) awaiting synchronization.")
+            if st.button("🚀 Sync to Intelligence", use_container_width=True):
+                for f in files_to_sync:
+                    with st.spinner(f"Indexing {f.name}..."):
+                        try:
+                            files = {"file": (f.name, f.getvalue())}
+                            resp = requests.post(f"{BACKEND_URL}/upload", files=files, timeout=60)
+                            if resp.status_code == 200:
+                                st.toast(f"Synchronized: {f.name}")
+                            else:
+                                st.error(f"Error: {resp.json().get('detail', 'Upload Rejected')}")
+                        except Exception as e:
+                            st.error(f"Network Error: {str(e)}")
+                st.rerun()
 
     st.divider()
     
