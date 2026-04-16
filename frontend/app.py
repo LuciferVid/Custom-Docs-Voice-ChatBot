@@ -6,103 +6,98 @@ import time
 import base64
 
 # Configuration
-# First try environment variable, then session state, then fallback to localhost
 DEFAULT_API_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
-
 if "API_URL" not in st.session_state:
     st.session_state.API_URL = DEFAULT_API_URL
 
 API_URL = st.session_state.API_URL
 
-st.set_page_config(page_title="Voice RAG Chatbot", page_icon="💬", layout="wide")
+st.set_page_config(page_title="Intelligence Core | RAG", page_icon="🔗", layout="wide")
 
-# Custom CSS for Premium Midnight Stealth Theme
+# Premium High-End CSS (Lucide & Custom Minimalist)
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
     
-    * { font-family: 'Outfit', sans-serif; }
+    * { font-family: 'Inter', sans-serif; }
     
-    /* Midnight Base */
+    /* Elegant Dark Canvas */
     .stApp {
-        background: radial-gradient(circle at 20% 20%, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
-        color: #e2e8f0;
+        background-color: #0b0e14;
+        color: #f1f5f9;
     }
     
-    /* Premium Glassmorphism Cards */
+    /* Professional Chat Bubbles */
     .user-bubble {
-        background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+        background: #2563eb;
         color: white;
-        padding: 18px 22px;
-        border-radius: 24px 24px 4px 24px;
-        margin-bottom: 24px;
-        max-width: 80%;
+        padding: 14px 18px;
+        border-radius: 16px 16px 4px 16px;
+        margin-bottom: 20px;
+        max-width: 75%;
         float: right;
         clear: both;
-        box-shadow: 0 8px 32px rgba(99, 102, 241, 0.3);
-        font-weight: 500;
-        animation: fadeInRight 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+        font-size: 0.95rem;
+        line-height: 1.5;
+        box-shadow: 0 4px 20px rgba(37, 99, 235, 0.15);
     }
     
     .assistant-bubble {
-        background: rgba(255, 255, 255, 0.05);
-        backdrop-filter: blur(16px);
-        -webkit-backdrop-filter: blur(16px);
-        color: #ffffff;
-        padding: 18px 22px;
-        border-radius: 24px 24px 24px 4px;
-        margin-bottom: 24px;
-        max-width: 85%;
+        background: #1e293b;
+        color: #f8fafc;
+        padding: 14px 18px;
+        border-radius: 16px 16px 16px 4px;
+        margin-bottom: 20px;
+        max-width: 80%;
         float: left;
         clear: both;
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
-        animation: fadeInLeft 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+        border: 1px solid #334155;
+        font-size: 0.95rem;
+        line-height: 1.5;
     }
     
-    .stMarkdown p {
-        color: #e2e8f0 !important;
-        font-size: 1.05rem;
-    }
-    
-    /* Sidebar Overhaul */
+    /* Sidebar Sophistication */
     section[data-testid="stSidebar"] {
         background-color: #0f172a !important;
-        border-right: 1px solid rgba(255, 255, 255, 0.1);
+        border-right: 1px solid #1e293b;
     }
     
-    section[data-testid="stSidebar"] h1, section[data-testid="stSidebar"] h2, section[data-testid="stSidebar"] h3 {
-        color: #ffffff !important;
+    /* Minimalist Inputs */
+    .stTextInput>div>div>input {
+        background-color: #1e293b !important;
+        color: white !important;
+        border: 1px solid #334155 !important;
+        border-radius: 8px !important;
     }
-
-    /* Buttons and Inputs */
+    
+    /* Primary Action Buttons */
     .stButton>button {
-        background: linear-gradient(90deg, #4f46e5, #7c3aed);
+        background-color: #2563eb;
         color: white;
         border: none;
-        border-radius: 12px;
-        font-weight: 600;
-        transition: all 0.3s ease;
+        border-radius: 6px;
+        padding: 0.5rem 1rem;
+        font-weight: 500;
+        transition: all 0.2s ease;
     }
     
     .stButton>button:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 4px 15px rgba(99, 102, 241, 0.4);
+        background-color: #1d4ed8;
+        border-color: #1d4ed8;
     }
-    
-    @keyframes fadeInRight { from { opacity: 0; transform: translateX(30px); } to { opacity: 1; transform: translateX(0); } }
-    @keyframes fadeInLeft { from { opacity: 0; transform: translateX(-30px); } to { opacity: 1; transform: translateX(0); } }
+
+    /* Remove Streamlit Branding */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
 </style>
 """, unsafe_allow_html=True)
 
 # Session state initialization
 if "messages" not in st.session_state:
     try:
-        resp = requests.get(f"{API_URL}/chat/history")
-        if resp.status_code == 200:
-            st.session_state.messages = resp.json()
-        else:
-            st.session_state.messages = []
+        resp = requests.get(f"{API_URL}/chat/history", timeout=2)
+        st.session_state.messages = resp.json() if resp.status_code == 200 else []
     except:
         st.session_state.messages = []
 
@@ -110,128 +105,123 @@ if "auto_play" not in st.session_state:
     st.session_state.auto_play = True
 
 def play_audio(text):
-    """Fetches and plays TTS audio (Free Version)."""
     try:
-        resp = requests.post(f"{API_URL}/chat/voice-output", json={"text": text})
+        resp = requests.post(f"{API_URL}/chat/voice-output", json={"text": text}, timeout=10)
         if resp.status_code == 200:
             audio_base64 = base64.b64encode(resp.content).decode("utf-8")
             st.markdown(f'<audio autoplay="true" src="data:audio/mp3;base64,{audio_base64}">', unsafe_allow_html=True)
     except:
         pass
 
+# Sidebar
 with st.sidebar:
-    st.title("🛰️ Mastery Hub")
+    st.title("System Console")
     
-    # Connection Manager
-    with st.expander("🔗 Backend Connection", expanded=(st.session_state.API_URL == "http://localhost:8000")):
-        new_url = st.text_input("Render Backend URL", value=st.session_state.API_URL, placeholder="https://your-app.onrender.com")
+    # Elegant Connection Manager
+    with st.expander("Network Configuration", expanded=(st.session_state.API_URL == "http://localhost:8000")):
+        new_url = st.text_input("Backend Endpoint", value=st.session_state.API_URL)
         if new_url != st.session_state.API_URL:
             st.session_state.API_URL = new_url
             st.rerun()
         
-        # Connection status check
         try:
-            requests.get(f"{st.session_state.API_URL}/documents", timeout=2)
-            st.success("Connected to Backend")
+            requests.get(f"{st.session_state.API_URL}/documents", timeout=1)
+            st.success("Synchronized")
         except:
-            st.error("Connection failed.")
-            st.caption("Paste your Render URL above 👆")
+            st.error("Offline")
+            st.caption("Enter the production Backend Endpoint above.")
 
     st.divider()
-    st.subheader("📚 Your Documents")
+    st.subheader("Knowledge Repository")
     
-    uploaded_files = st.file_uploader("Upload Documents", type=["pdf", "docx", "txt", "md"], accept_multiple_files=True)
+    uploaded_files = st.file_uploader("Index Documents", type=["pdf", "docx", "txt", "md"], accept_multiple_files=True, label_visibility="collapsed")
     if uploaded_files:
         for uploaded_file in uploaded_files:
-            with st.spinner(f"Processing {uploaded_file.name}..."):
+            with st.spinner(f"Indexing {uploaded_file.name}..."):
                 files = {"file": (uploaded_file.name, uploaded_file.getvalue())}
                 resp = requests.post(f"{API_URL}/upload", files=files)
                 if resp.status_code == 200:
-                    st.toast(f"✅ {uploaded_file.name} uploaded successfully!")
+                    st.toast(f"Indexed: {uploaded_file.name}")
                 else:
-                    st.error(f"❌ Failed to upload {uploaded_file.name}")
+                    st.error(f"Error: {uploaded_file.name}")
 
     st.divider()
     
-    # List documents
     try:
-        docs_resp = requests.get(f"{API_URL}/documents")
+        docs_resp = requests.get(f"{API_URL}/documents", timeout=2)
         if docs_resp.status_code == 200:
             docs = docs_resp.json()
             if docs:
                 for doc in docs:
-                    col1, col2 = st.columns([4, 1])
-                    col1.text(f"📄 {doc['doc_name']}")
-                    if col2.button("🗑️", key=f"del_{doc['doc_name']}"):
+                    col1, col2 = st.columns([5, 1])
+                    col1.caption(f" {doc['doc_name']}")
+                    if col2.button("×", key=f"del_{doc['doc_name']}"):
                         requests.delete(f"{API_URL}/documents/{doc['doc_name']}")
                         st.rerun()
             else:
-                st.info("No documents uploaded yet.")
+                st.caption("No active documents indexed.")
     except:
-        st.error("Connection failed.")
+        pass
 
     st.divider()
-    st.subheader("🤖 Intelligence")
-    st.info("Powered by Google Gemini 2.0 Flash")
-    provider_id = "gemini"
+    st.subheader("Voice Parameters")
+    st.session_state.auto_play = st.toggle("Voice Synthesis Output", value=st.session_state.auto_play)
     
     st.divider()
-    st.subheader("🔊 Voice Settings")
-    st.session_state.auto_play = st.toggle("Auto-play responses", value=st.session_state.auto_play)
-    
-    st.divider()
-    if st.button("🗑️ Clear Conversation", use_container_width=True):
+    if st.button("Initialize Fresh Session", use_container_width=True):
         requests.post(f"{API_URL}/chat/clear")
         st.session_state.messages = []
         st.rerun()
 
-# Main Area
-st.title("💬 Chat with Your Documents")
+# Main Interface
+st.header("Intelligence Interface")
 
-# Robust document fetching
+# Document availability check
 try:
-    docs_resp = requests.get(f"{API_URL}/documents")
+    docs_resp = requests.get(f"{API_URL}/documents", timeout=2)
     docs = docs_resp.json() if docs_resp.status_code == 200 else []
 except:
     docs = []
 
 if not docs:
-    st.warning("👆 Upload documents from the sidebar to get started", icon="⚠️")
+    st.warning("Please index documents in the System Console to begin analysis.")
 else:
-    # Document filter
-    doc_options = ["All Documents"] + [d['doc_name'] for d in docs]
-    selected_doc = st.selectbox("Search in:", doc_options)
-    filter_doc = None if selected_doc == "All Documents" else selected_doc
+    doc_options = ["Universal Context"] + [d['doc_name'] for d in docs]
+    selected_doc = st.selectbox("Focus Scope", doc_options)
+    filter_doc = None if selected_doc == "Universal Context" else selected_doc
 
-    # Chat Area
+    # Communication Thread
     for i, msg in enumerate(st.session_state.messages):
         role, content = msg["role"], msg["content"]
         if role == "user":
             st.markdown(f'<div class="user-bubble">{content}</div>', unsafe_allow_html=True)
         else:
             st.markdown(f'<div class="assistant-bubble">{content}</div>', unsafe_allow_html=True)
-            if st.button("🔊 Play", key=f"play_{i}"):
+            if st.button("Listen", key=f"play_{i}"):
                 play_audio(content)
 
-    # Input Area
+    # Input Control
     st.write("---")
-    col1, col2, col3 = st.columns([10, 1, 1], vertical_alignment="bottom")
-    with col1:
-        user_input = st.text_input("Type your question...", key="text_input", label_visibility="collapsed")
-    with col2:
-        audio_bytes = audio_recorder(text="", icon_size="2x", neutral_color="#007bff")
-    with col3:
-        send_button = st.button("Send", use_container_width=True)
+    c1, c2, c3 = st.columns([10, 1, 1], vertical_alignment="bottom")
+    with c1:
+        user_input = st.text_input("Consult internal knowledge...", key="text_input", label_visibility="collapsed")
+    with c2:
+        audio_bytes = audio_recorder(text="", icon_size="2x", neutral_color="#2563eb")
+    with c3:
+        if st.button("Run", use_container_width=True) or (user_input and not audio_bytes):
+            pass # Logic handled below
 
-    if (send_button and user_input) or audio_bytes:
-        payload = {"query": user_input, "filter_doc": filter_doc, "provider": provider_id}
-        url = f"{API_URL}/chat"
+    if (user_input and not audio_bytes and st.session_state.get('last_input') != user_input) or audio_bytes:
+        st.session_state.last_input = user_input
+        payload = {"query": user_input, "filter_doc": filter_doc}
         
         if audio_bytes:
-            files = {"audio": ("query.wav", audio_bytes, "audio/wav")}
-            resp = requests.post(f"{API_URL}/chat/voice-input?provider={provider_id}", files=files)
+            with st.spinner("Processing Signal..."):
+                files = {"audio": ("signal.wav", audio_bytes, "audio/wav")}
+                resp = requests.post(f"{API_URL}/chat/voice-input", files=files)
         else:
-            resp = requests.post(url, json=payload)
+            with st.spinner("Analyzing..."):
+                resp = requests.post(f"{API_URL}/chat", json=payload)
             
         if resp.status_code == 200:
             result = resp.json()
