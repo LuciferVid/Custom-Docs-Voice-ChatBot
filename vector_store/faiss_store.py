@@ -27,10 +27,18 @@ class FAISSVectorStore:
         embeddings = generate_embeddings_batch(texts)
         embeddings_np = np.array(embeddings).astype('float32')
         
+        dimension = embeddings_np.shape[1]
+        
         if self.index is None:
-            # all-MiniLM-L6-v2 has dimension 384
-            dimension = embeddings_np.shape[1]
             self.index = faiss.IndexFlatL2(dimension)
+        elif self.index.d != dimension:
+            # Dimension mismatch (happens when switching models) - reset index
+            logger.warning(f"Dimension mismatch: Index={self.index.d}, Model={dimension}. Rebuilding index.")
+            self.index = faiss.IndexFlatL2(dimension)
+            # Re-generate embeddings for all previous chunks if needed, 
+            # but for now we'll just start fresh for safety
+            self.chunks = []
+            self.doc_registry = {}
             
         self.index.add(embeddings_np)
         self.chunks.extend(chunks)
