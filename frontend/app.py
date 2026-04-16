@@ -6,9 +6,8 @@ import time
 import base64
 
 # --- Configuration ---
-# Standardizes the connection to the backend. 
-# Defaults to localhost for dev, or the production URL set in environment variables.
-BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
+# Production Backend URL
+BACKEND_URL = os.getenv("BACKEND_URL", "https://custom-docs-voice-chatbot.onrender.com")
 
 st.set_page_config(page_title="Intelligence Core | RAG", page_icon="🔗", layout="wide")
 
