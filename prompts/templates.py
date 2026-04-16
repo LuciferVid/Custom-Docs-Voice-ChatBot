@@ -26,3 +26,17 @@ Question: {query}
 
 Answer:
 """
+
+SUGGEST_PROMPT = """
+You are a document analyzer. Based on the following document excerpts, generate 3 professional and insightful questions 
+that a user would want to ask to understand the document's core contents better.
+Rules:
+1. Questions must be specific to the content.
+2. Questions must be insightful (not just "what is this?").
+3. Return ONLY a JSON list of strings.
+
+Context:
+{context}
+
+JSON Output:
+"""

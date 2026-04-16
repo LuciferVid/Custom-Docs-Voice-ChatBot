@@ -12,6 +12,8 @@ from dotenv import load_dotenv
 from ingestion.document_loader import load_document
 from ingestion.text_splitter import split_into_chunks
 from vector_store.faiss_store import FAISSVectorStore
+from prompts.templates import SUGGEST_PROMPT
+import json
 from rag.memory import ConversationMemory
 from rag.chain import get_answer
 from voice.speech_to_text import transcribe_audio
@@ -178,6 +180,41 @@ async def chat_history():
     Get message history.
     """
     return memory.to_list()
+
+@app.get("/documents/{doc_name}/suggestions")
+async def get_suggestions(doc_name: str):
+    """
+    Generate AI suggested questions for a specific document.
+    """
+    try:
+        # Get first few chunks for context (up to 3)
+        relevant_chunks = [c["text"] for c in vector_store.chunks if c.get("source_file") == doc_name][:3]
+        if not relevant_chunks:
+             return ["How can I help with this document?", "Summarize this file", "What are the key takeaways?"]
+
+        context = "\n---\n".join(relevant_chunks)
+        prompt = SUGGEST_PROMPT.format(context=context)
+        
+        client = get_gemini_client()
+        response = client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=prompt,
+            config={"temperature": 0.5}
+        )
+        
+        # Parse JSON list from response
+        text = response.text.replace("```json", "").replace("```", "").strip()
+        try:
+            suggestions = json.loads(text)
+            return suggestions[:3]
+        except:
+            # Fallback for non-JSON responses
+            lines = [l.strip("- ").strip() for l in text.split("\n") if l.strip()]
+            return lines[:3]
+            
+    except Exception as e:
+        print(f"Suggestions Error: {e}")
+        return ["Summarize this document", "What are the main points?", "Key takeaways"]
 
 if __name__ == "__main__":
     import uvicorn

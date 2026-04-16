@@ -67,6 +67,11 @@ try:
 except:
     st.session_state.docs = []
 
+if "suggestions" not in st.session_state:
+    st.session_state.suggestions = []
+if "last_doc" not in st.session_state:
+    st.session_state.last_doc = None
+
 def play_audio(text):
     try:
         resp = requests.post(f"{BACKEND_URL}/chat/voice-output", json={"text": text}, timeout=10)
@@ -75,6 +80,26 @@ def play_audio(text):
             st.markdown(f'<audio autoplay="true" src="data:audio/mp3;base64,{audio_base64}">', unsafe_allow_html=True)
     except:
         pass
+
+def process_query(query, is_audio=False, audio_data=None):
+    effective_query = query if query and query.strip() else "Please provide a comprehensive summary of the latest intelligence."
+    payload = {"query": effective_query, "filter_doc": None}
+    
+    if is_audio and audio_data:
+        with st.spinner("Processing Signal..."):
+            files = {"audio": ("signal.wav", audio_data, "audio/wav")}
+            resp = requests.post(f"{BACKEND_URL}/chat/voice-input", files=files)
+    else:
+        with st.spinner("Analyzing Intelligence..." if not (query and query.strip()) else "Finding Answer..."):
+            resp = requests.post(f"{BACKEND_URL}/chat", json=payload)
+        
+    if resp.status_code == 200:
+        result = resp.json()
+        st.session_state.messages.append({"role": "user", "content": result.get("transcription", effective_query)})
+        st.session_state.messages.append({"role": "assistant", "content": result["answer"]})
+        if st.session_state.auto_play:
+            play_audio(result["answer"])
+        st.rerun()
 
 # Sidebar
 with st.sidebar:
@@ -137,10 +162,31 @@ with st.sidebar:
 # Main Interface
 st.header("Intelligence Interface")
 
-# Context Selection & Chat UI (Now Always Visible)
-doc_options = ["Universal Context"] + [d['doc_name'] for d in st.session_state.docs]
-selected_doc = st.selectbox("Analysis Scope", doc_options)
-filter_doc = None if selected_doc == "Universal Context" else selected_doc
+# Universal Intelligence Logic (No Manual Scope Required)
+if "last_doc" not in st.session_state:
+    st.session_state.last_doc = None
+
+# Automatically fetch suggestions for the latest document added
+current_latest_doc = st.session_state.docs[0]['doc_name'] if st.session_state.docs else None
+
+if current_latest_doc != st.session_state.last_doc:
+    st.session_state.last_doc = current_latest_doc
+    if current_latest_doc:
+        try:
+            s_resp = requests.get(f"{BACKEND_URL}/documents/{current_latest_doc}/suggestions?t={time.time()}")
+            st.session_state.suggestions = s_resp.json() if s_resp.status_code == 200 else []
+        except:
+            st.session_state.suggestions = []
+    else:
+        st.session_state.suggestions = []
+
+# Display Suggestions
+if st.session_state.suggestions:
+    st.caption("Suggested Investigations:")
+    cols = st.columns(len(st.session_state.suggestions))
+    for i, suggestion in enumerate(st.session_state.suggestions):
+        if cols[i].button(suggestion, key=f"sug_{i}", use_container_width=True):
+            process_query(suggestion)
 
 # Chat Thread
 if not st.session_state.messages:
@@ -174,22 +220,4 @@ with c3:
     send_trigger = st.button("Analyze", use_container_width=True)
 
 if (send_trigger) or audio_stream:
-    # Auto-Summary logic if input is empty
-    effective_query = user_input if user_input.strip() else f"Please provide a comprehensive executive summary of the document: {selected_doc}"
-    payload = {"query": effective_query, "filter_doc": filter_doc}
-    
-    if audio_stream:
-        with st.spinner("Processing Signal..."):
-            files = {"audio": ("signal.wav", audio_stream, "audio/wav")}
-            resp = requests.post(f"{BACKEND_URL}/chat/voice-input", files=files)
-    else:
-        with st.spinner("Analyzing Intelligence..." if not user_input.strip() else "Finding Answer..."):
-            resp = requests.post(f"{BACKEND_URL}/chat", json=payload)
-        
-    if resp.status_code == 200:
-        result = resp.json()
-        st.session_state.messages.append({"role": "user", "content": result.get("transcription", user_input)})
-        st.session_state.messages.append({"role": "assistant", "content": result["answer"]})
-        if st.session_state.auto_play:
-            play_audio(result["answer"])
-        st.rerun()
+    process_query(user_input, is_audio=True if audio_stream else False, audio_data=audio_stream)
