@@ -197,7 +197,7 @@ async def get_suggestions(doc_name: str):
         
         client = get_gemini_client()
         response = client.models.generate_content(
-            model="gemini-2.0-flash",
+            model="gemini-1.5-flash",
             contents=prompt,
             config={"temperature": 0.5}
         )

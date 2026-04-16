@@ -17,7 +17,7 @@ def get_answer(query: str, vector_store, memory, gemini_client, filter_doc: str 
         try:
             prompt = REPHRASE_PROMPT.format(history=history, query=query)
             response = gemini_client.models.generate_content(
-                model="gemini-2.0-flash",
+                model="gemini-1.5-flash",
                 contents=prompt,
                 config={"temperature": 0}
             )
@@ -40,7 +40,10 @@ def get_answer(query: str, vector_store, memory, gemini_client, filter_doc: str 
         answer_text = response.text.strip()
     except Exception as e:
         logger.error(f"Error generating answer with Gemini: {e}")
-        answer_text = "I encountered an error while searching for the answer."
+        if not context or "No relevant context" in context:
+            answer_text = "Your document context seems to have expired (likely due to a server refresh). Please re-upload your document to continue our analysis."
+        else:
+            answer_text = "I'm having trouble connecting to the AI brain right now. Please try your question again in a moment."
 
     # Step 4: Update memory
     memory.add_message("user", query)
