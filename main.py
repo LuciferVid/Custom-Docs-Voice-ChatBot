@@ -98,6 +98,11 @@ async def chat(request: ChatRequest):
     Text chat endpoint using Gemini.
     """
     try:
+        # Check if index is empty
+        docs = vector_store.get_documents()
+        if not docs:
+            raise HTTPException(status_code=400, detail="Intelligence context lost. Please re-sync your documents in the sidebar.")
+            
         response = get_answer(
             request.query, 
             vector_store, 
@@ -107,7 +112,10 @@ async def chat(request: ChatRequest):
         )
         return response
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        error_detail = str(e)
+        if "No intelligence context" in error_detail or "Intelligence context lost" in error_detail:
+            raise HTTPException(status_code=404, detail=error_detail)
+        raise HTTPException(status_code=500, detail=error_detail)
 
 @app.post("/chat/voice-input")
 async def chat_voice_input(audio: UploadFile = File(...)):
@@ -147,7 +155,7 @@ async def chat_voice_output(request: TTSRequest):
 @app.get("/documents")
 async def list_documents():
     """
-    Get list of documents in vector store.
+    Get list of documents in vector store with intelligence diagnostics.
     """
     return vector_store.get_documents()
 

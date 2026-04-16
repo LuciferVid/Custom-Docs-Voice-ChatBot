@@ -114,6 +114,16 @@ def process_query(query, is_audio=False, audio_data=None):
         if st.session_state.auto_play:
             play_audio(result["answer"])
         st.rerun()
+    else:
+        try:
+            error_data = resp.json()
+            detail = error_data.get("detail", "The Intelligence System encountered an unknown signal error.")
+        except:
+            detail = "The AI context could not be reached. Please verify the backend signal status."
+            
+        st.session_state.messages.append({"role": "user", "content": effective_query})
+        st.session_state.messages.append({"role": "assistant", "content": f"⚠️ **Signal Loss**: {detail}\n\n*Action Required*: Please click the **🚀 Sync to Intelligence** button in the sidebar to re-initialize your context."})
+        st.rerun()
 
 # Sidebar
 with st.sidebar:
@@ -158,7 +168,9 @@ with st.sidebar:
         st.caption("Active Intelligence Context:")
         for doc in st.session_state.docs:
             col1, col2 = st.columns([5, 1])
+            chunks = doc.get('chunk_count', 0)
             col1.markdown(f"🔹 **{doc['doc_name']}**")
+            col1.caption(f"📡 {chunks} Intelligence Chunks Digested")
             if col2.button("🗑️", key=f"del_{doc['doc_name']}"):
                 requests.delete(f"{BACKEND_URL}/documents/{doc['doc_name']}", timeout=15)
                 st.rerun()

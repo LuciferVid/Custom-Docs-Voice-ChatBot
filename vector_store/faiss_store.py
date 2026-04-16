@@ -51,9 +51,11 @@ class FAISSVectorStore:
             self.index.add(embeddings_np)
             self.chunks.extend(chunks)
             
+            # Detailed tracking
             self.doc_registry[doc_name] = {
                 "chunk_count": len(chunks),
-                "added_at": datetime.now().isoformat()
+                "added_at": datetime.now().isoformat(),
+                "status": "indexed"
             }
             self.save()
             logger.info(f"Successfully indexed {doc_name} with {len(chunks)} chunks.")
@@ -63,8 +65,9 @@ class FAISSVectorStore:
             raise Exception(f"Intelligence System Error: {str(e)}")
 
     def search(self, query: str, top_k: int = 5, filter_doc: str = None) -> list[dict]:
-        if self.index is None:
-            return []
+        if self.index is None or not self.chunks:
+            logger.error("Search attempted on empty index.")
+            raise Exception("No intelligence context currently loaded. Please sync your documents.")
             
         try:
             query_embedding = generate_embedding(query)
@@ -73,13 +76,13 @@ class FAISSVectorStore:
                 
             query_embedding_np = np.array([query_embedding]).astype('float32')
             
-            # Ensure query match dimension
             if query_embedding_np.shape[1] != self.index.d:
                 logger.error(f"Search dimension mismatch: {query_embedding_np.shape[1]} vs {self.index.d}")
                 return []
 
             distances, indices = self.index.search(query_embedding_np, top_k * 2)
             
+            # ... rest of search logic ...
             results = []
             if len(indices) > 0:
                 for i in range(len(indices[0])):
@@ -90,7 +93,7 @@ class FAISSVectorStore:
                     chunk = self.chunks[idx].copy()
                     chunk["score"] = float(distances[0][i])
                     
-                    if filter_doc and chunk["source_file"] != filter_doc:
+                    if filter_doc and chunk.get("source_file") != filter_doc:
                         continue
                         
                     results.append(chunk)
@@ -99,31 +102,37 @@ class FAISSVectorStore:
             return results
         except Exception as e:
             logger.error(f"Search failure: {e}")
-            return []
+            raise Exception(f"Analysis engine failure: {str(e)}")
 
     def delete_document(self, doc_name: str):
         if doc_name not in self.doc_registry:
             return
             
-        self.chunks = [c for c in self.chunks if c["source_file"] != doc_name]
-        del self.doc_registry[doc_name]
+        self.chunks = [c for c in self.chunks if c.get("source_file") != doc_name]
+        if doc_name in self.doc_registry:
+            del self.doc_registry[doc_name]
         
         if not self.chunks:
             self.index = None
         else:
+            # Rebuild index
             texts = [chunk["text"] for chunk in self.chunks]
-            embeddings = generate_embeddings_batch(texts)
-            if embeddings:
-                embeddings_np = np.array(embeddings).astype('float32')
-                dimension = embeddings_np.shape[1] if len(embeddings_np.shape) >= 2 else 768
-                self.index = faiss.IndexFlatL2(dimension)
-                self.index.add(embeddings_np)
-            else:
+            try:
+                embeddings = generate_embeddings_batch(texts)
+                if embeddings:
+                    embeddings_np = np.array(embeddings).astype('float32')
+                    self.index = faiss.IndexFlatL2(embeddings_np.shape[1])
+                    self.index.add(embeddings_np)
+                else:
+                    self.index = None
+            except:
                 self.index = None
             
         self.save()
 
     def save(self):
+        if not os.path.exists(self.index_dir):
+            os.makedirs(self.index_dir)
         if self.index is not None:
             faiss.write_index(self.index, self.index_path)
         metadata = {"chunks": self.chunks, "doc_registry": self.doc_registry}
@@ -152,7 +161,7 @@ class FAISSVectorStore:
         for name, info in self.doc_registry.items():
             docs.append({
                 "doc_name": name,
-                "chunk_count": info["chunk_count"],
-                "added_at": info["added_at"]
+                "chunk_count": info.get("chunk_count", 0),
+                "added_at": info.get("added_at", datetime.now().isoformat())
             })
         return docs
