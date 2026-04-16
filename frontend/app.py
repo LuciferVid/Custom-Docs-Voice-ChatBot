@@ -6,7 +6,13 @@ import time
 import base64
 
 # Configuration
-API_URL = "http://localhost:8000"
+# First try environment variable, then session state, then fallback to localhost
+DEFAULT_API_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
+
+if "API_URL" not in st.session_state:
+    st.session_state.API_URL = DEFAULT_API_URL
+
+API_URL = st.session_state.API_URL
 
 st.set_page_config(page_title="Voice RAG Chatbot", page_icon="💬", layout="wide")
 
@@ -113,9 +119,26 @@ def play_audio(text):
     except:
         pass
 
-# Sidebar
 with st.sidebar:
-    st.title("📚 Your Documents")
+    st.title("🛰️ Mastery Hub")
+    
+    # Connection Manager
+    with st.expander("🔗 Backend Connection", expanded=(st.session_state.API_URL == "http://localhost:8000")):
+        new_url = st.text_input("Render Backend URL", value=st.session_state.API_URL, placeholder="https://your-app.onrender.com")
+        if new_url != st.session_state.API_URL:
+            st.session_state.API_URL = new_url
+            st.rerun()
+        
+        # Connection status check
+        try:
+            requests.get(f"{st.session_state.API_URL}/documents", timeout=2)
+            st.success("Connected to Backend")
+        except:
+            st.error("Connection failed.")
+            st.caption("Paste your Render URL above 👆")
+
+    st.divider()
+    st.subheader("📚 Your Documents")
     
     uploaded_files = st.file_uploader("Upload Documents", type=["pdf", "docx", "txt", "md"], accept_multiple_files=True)
     if uploaded_files:
