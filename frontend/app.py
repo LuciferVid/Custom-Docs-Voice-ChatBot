@@ -69,15 +69,17 @@ if "processed_files" not in st.session_state:
     st.session_state.processed_files = set()
 
 # Global Document Fetch (High Timeout for Render)
+if "docs" not in st.session_state:
+    st.session_state.docs = None
+
 try:
     docs_resp = requests.get(f"{BACKEND_URL}/documents?t={time.time()}", timeout=15)
-    st.session_state.docs = docs_resp.json() if docs_resp.status_code == 200 else []
+    if docs_resp.status_code == 200:
+        st.session_state.docs = docs_resp.json()
+    else:
+        st.session_state.docs = []
 except Exception as e:
-    st.session_state.docs = []
-    st.sidebar.error(f"Signal Timeout: Backend is waking up... {str(e)}")
-
-if "currently_syncing" not in st.session_state:
-    st.session_state.currently_syncing = set()
+    st.session_state.docs = None
 
 if "suggestions" not in st.session_state:
     st.session_state.suggestions = []
@@ -116,37 +118,38 @@ def process_query(query, is_audio=False, audio_data=None):
 # Sidebar
 with st.sidebar:
     st.title("System Control")
-    st.caption(f"Backend Status: {'🟢 Online' if st.session_state.docs is not None else '🔴 Connecting...'}")
+    st.caption(f"Backend Status: {'🟢 Online' if st.session_state.docs is not None else '🔴 Offline/Waking Up...'}")
     st.divider()
     
     st.subheader("Document Repository")
     uploaded_files = st.file_uploader("Index Documents", type=["pdf", "docx", "txt", "md"], accept_multiple_files=True, label_visibility="collapsed")
     
     if uploaded_files:
-        files_to_sync = [f for f in uploaded_files if not any(d['doc_name'] == f.name for d in st.session_state.docs)]
+        current_docs = st.session_state.docs if st.session_state.docs is not None else []
+        files_to_sync = [f for f in uploaded_files if not any(d['doc_name'] == f.name for d in current_docs)]
         
         if files_to_sync:
             st.warning(f"📡 {len(files_to_sync)} file(s) awaiting intelligence sync.")
             if st.button("🚀 Sync to Intelligence", use_container_width=True):
+                success_count = 0
                 for f in files_to_sync:
                     with st.spinner(f"Synchronizing {f.name}..."):
                         try:
-                            # Explicitly check for empty content
-                            content = f.getvalue()
-                            if not content:
-                                st.error(f"❌ {f.name} is empty.")
-                                continue
-                                
-                            files = {"file": (f.name, content)}
-                            resp = requests.post(f"{BACKEND_URL}/upload", files=files, timeout=60)
+                            # 120s timeout for heavy PDF processing
+                            files = {"file": (f.name, f.getvalue())}
+                            resp = requests.post(f"{BACKEND_URL}/upload", files=files, timeout=120)
                             if resp.status_code == 200:
                                 st.toast(f"✅ Indexed: {f.name}")
+                                success_count += 1
                             else:
                                 err_msg = resp.json().get('detail', 'System Rejected')
-                                st.error(f"❌ Failed: {err_msg}")
+                                st.error(f"❌ {f.name} Sync Failed: {err_msg}")
                         except Exception as e:
-                            st.error(f"⚠️ Network Signal Lost: {str(e)}")
-                st.rerun()
+                            st.error(f"⚠️ {f.name} Network Signal Lost: {str(e)}")
+                
+                if success_count > 0:
+                    time.sleep(1)
+                    st.rerun()
 
     st.divider()
     
