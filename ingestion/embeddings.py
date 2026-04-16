@@ -18,7 +18,7 @@ def generate_embedding(text: str) -> list[float]:
     client = get_client()
     try:
         result = client.models.embed_content(
-            model="text-embedding-004",
+            model="embedding-001",
             contents=text
         )
         # Handle different response formats in SDK
@@ -39,7 +39,7 @@ def generate_embeddings_batch(texts: list[str]) -> list[list[float]]:
     client = get_client()
     try:
         result = client.models.embed_content(
-            model="text-embedding-004",
+            model="embedding-001",
             contents=texts
         )
         # Robust parsing for list of Embedding objects
