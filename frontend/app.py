@@ -46,6 +46,15 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # Session state initialization
+def get_docs():
+    try:
+        resp = requests.get(f"{BACKEND_URL}/documents")
+        if resp.status_code == 200:
+            return resp.json()
+        return []
+    except:
+        return []
+
 if "messages" not in st.session_state:
     try:
         resp = requests.get(f"{BACKEND_URL}/chat/history", timeout=2)
