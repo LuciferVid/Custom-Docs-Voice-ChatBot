@@ -144,7 +144,15 @@ filter_doc = None if selected_doc == "Universal Context" else selected_doc
 
 # Chat Thread
 if not st.session_state.messages:
-    st.caption("Enter a query or record a signal to begin the deep analysis.")
+    st.markdown("### 📥 Document Signal Received")
+    st.info("I am ready to analyze your context. You can use the signal bar below to:")
+    c1, c2 = st.columns(2)
+    with c1:
+        st.write("📝 **Ask specific questions**")
+        st.caption("e.g., 'What is the contract duration?'")
+    with c2:
+        st.write("📊 **Request a summary**")
+        st.caption("Just click 'Analyze' with an empty bar.")
 else:
     for i, msg in enumerate(st.session_state.messages):
         role, content = msg["role"], msg["content"]
@@ -159,21 +167,23 @@ else:
 st.write("---")
 c1, c2, c3 = st.columns([10, 1, 1], vertical_alignment="bottom")
 with c1:
-    user_input = st.text_input("Consult internal knowledge...", key="text_input", label_visibility="collapsed")
+    user_input = st.text_input("Summarize, ask a question, or find insights...", key="text_input", label_visibility="collapsed")
 with c2:
     audio_stream = audio_recorder(text="", icon_size="2x", neutral_color="#2563eb")
 with c3:
     send_trigger = st.button("Analyze", use_container_width=True)
 
-if (send_trigger and user_input) or audio_stream:
-    payload = {"query": user_input, "filter_doc": filter_doc}
+if (send_trigger) or audio_stream:
+    # Auto-Summary logic if input is empty
+    effective_query = user_input if user_input.strip() else f"Please provide a comprehensive executive summary of the document: {selected_doc}"
+    payload = {"query": effective_query, "filter_doc": filter_doc}
     
     if audio_stream:
         with st.spinner("Processing Signal..."):
             files = {"audio": ("signal.wav", audio_stream, "audio/wav")}
             resp = requests.post(f"{BACKEND_URL}/chat/voice-input", files=files)
     else:
-        with st.spinner("Analyzing..."):
+        with st.spinner("Analyzing Intelligence..." if not user_input.strip() else "Finding Answer..."):
             resp = requests.post(f"{BACKEND_URL}/chat", json=payload)
         
     if resp.status_code == 200:
