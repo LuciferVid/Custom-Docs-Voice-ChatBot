@@ -124,14 +124,18 @@ def process_query(query, is_audio=False, audio_data=None):
             play_audio(result["answer"])
         st.rerun()
     elif resp.status_code in [404, 400]:
-        # RESCUE ATTEMPT: If context is lost, check if we have files to sync
-        current_docs = st.session_state.docs if st.session_state.docs is not None else []
-        # We need a way to get 'uploaded_files' inside here. 
-        # For simplicity, we tell the user to click the button if it happens repeatedly.
-        # But for the 54MB case, we'll try to find any unsynced files.
-        st.warning("📡 Intelligence context lost. Attempting auto-rescue...")
-        st.session_state.messages.append({"role": "user", "content": effective_query})
-        st.session_state.messages.append({"role": "assistant", "content": "⚠️ **Intelligence Context Lost**. I was unable to find your document's memory (this happens when the server restarts). Please click the **🚀 Sync to Intelligence** button in the sidebar once more to re-read your files."})
+        # ULTIMATE AUTO-RESCUE: If context is lost, attempt to re-sync everything on deck
+        if "on_deck" in st.session_state and st.session_state.on_deck:
+            st.warning("📡 Intelligence signal lost. Auto-restoring brain... please wait.")
+            success = sync_intelligence(st.session_state.on_deck)
+            if success > 0:
+                # Retry the query ONE TIME
+                st.info("⭐ Signal restored! Retrying your question...")
+                time.sleep(1)
+                process_query(query, is_audio, audio_data)
+                return
+        
+        st.error("⚠️ Intelligence Context Lost. Please ensure your files are still visible in the sidebar and try again.")
         st.rerun()
     else:
         try:
@@ -141,7 +145,7 @@ def process_query(query, is_audio=False, audio_data=None):
             detail = "The AI context could not be reached. Please verify the backend signal status."
             
         st.session_state.messages.append({"role": "user", "content": effective_query})
-        st.session_state.messages.append({"role": "assistant", "content": f"⚠️ **Signal Loss**: {detail}\n\n*Action Required*: Please click the **🚀 Sync to Intelligence** button in the sidebar to re-initialize your context."})
+        st.session_state.messages.append({"role": "assistant", "content": f"⚠️ **Signal Loss**: {detail}"})
         st.rerun()
 
 # Sidebar
@@ -153,19 +157,21 @@ with st.sidebar:
     st.subheader("Document Repository")
     uploaded_files = st.file_uploader("Index Documents", type=["pdf", "docx", "txt", "md"], accept_multiple_files=True, label_visibility="collapsed")
     
+    # Track files for auto-sync and rescue
     if uploaded_files:
+        st.session_state.on_deck = uploaded_files
         current_docs = st.session_state.docs if st.session_state.docs is not None else []
         files_to_sync = [f for f in uploaded_files if not any(d['doc_name'] == f.name for d in current_docs)]
         
         if files_to_sync:
-            st.warning(f"📡 {len(files_to_sync)} file(s) awaiting intelligence sync.")
+            st.info(f"📡 {len(files_to_sync)} file(s) ready for initialization.")
             if st.button("🚀 Sync to Intelligence", use_container_width=True):
                 success_count = sync_intelligence(files_to_sync)
                 if success_count > 0:
                     time.sleep(1)
                     st.rerun()
-                    time.sleep(1)
-                    st.rerun()
+    else:
+        st.session_state.on_deck = []
 
     st.divider()
     
