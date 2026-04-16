@@ -74,13 +74,23 @@ with st.sidebar:
     uploaded_files = st.file_uploader("Index Documents", type=["pdf", "docx", "txt", "md"], accept_multiple_files=True, label_visibility="collapsed")
     if uploaded_files:
         for uploaded_file in uploaded_files:
-            with st.spinner(f"Indexing {uploaded_file.name}..."):
-                files = {"file": (uploaded_file.name, uploaded_file.getvalue())}
-                resp = requests.post(f"{BACKEND_URL}/upload", files=files)
-                if resp.status_code == 200:
-                    st.toast(f"Indexed: {uploaded_file.name}")
-                else:
-                    st.error(f"Error indexing {uploaded_file.name}")
+            # Prevent re-uploading if already in the list
+            if any(d['doc_name'] == uploaded_file.name for d in (docs if 'docs' in locals() else [])):
+                continue
+                
+            with st.spinner(f"Synchronizing {uploaded_file.name}..."):
+                try:
+                    files = {"file": (uploaded_file.name, uploaded_file.getvalue())}
+                    # Higher timeout for model loading on Render
+                    resp = requests.post(f"{BACKEND_URL}/upload", files=files, timeout=60)
+                    if resp.status_code == 200:
+                        st.toast(f"Success: {uploaded_file.name}")
+                        st.rerun()
+                    else:
+                        st.error(f"Failed to index {uploaded_file.name}")
+                except Exception as e:
+                    st.error(f"Connection error: System is initializing.")
+                    st.caption("The backend is waking up. Please wait 30s and try again.")
 
     st.divider()
     
