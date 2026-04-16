@@ -61,7 +61,8 @@ if "processed_files" not in st.session_state:
 
 # Global Document Fetch (Ensures sync across all components)
 try:
-    docs_resp = requests.get(f"{BACKEND_URL}/documents", timeout=2)
+    # Use timestamp to bust any potential caching
+    docs_resp = requests.get(f"{BACKEND_URL}/documents?t={time.time()}", timeout=2)
     st.session_state.docs = docs_resp.json() if docs_resp.status_code == 200 else []
 except:
     st.session_state.docs = []
@@ -138,8 +139,8 @@ st.header("Intelligence Interface")
 
 # Context Selection & Chat UI (Now Always Visible)
 doc_options = ["Universal Context"] + [d['doc_name'] for d in st.session_state.docs]
-selected_doc = st.selectbox("Analysis Scope", doc_options if st.session_state.docs else ["Awaiting Documents..."])
-filter_doc = None if selected_doc in ["Universal Context", "Awaiting Documents..."] else selected_doc
+selected_doc = st.selectbox("Analysis Scope", doc_options)
+filter_doc = None if selected_doc == "Universal Context" else selected_doc
 
 # Chat Thread
 if not st.session_state.messages:
