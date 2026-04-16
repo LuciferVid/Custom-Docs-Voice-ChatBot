@@ -87,10 +87,15 @@ with st.sidebar:
                         st.toast(f"Success: {uploaded_file.name}")
                         st.rerun()
                     else:
-                        st.error(f"Failed to index {uploaded_file.name}")
+                        error_detail = "Unknown Error"
+                        try:
+                            error_detail = resp.json().get("detail", "Unknown backend error")
+                        except: pass
+                        st.error(f"Indexing Failed: {error_detail}")
+                        st.caption(f"File: {uploaded_file.name}")
                 except Exception as e:
-                    st.error(f"Connection error: System is initializing.")
-                    st.caption("The backend is waking up. Please wait 30s and try again.")
+                    st.error("Engine Connection Offline")
+                    st.caption("The backend is likely still deploying or waking up. Please wait 1 minute.")
 
     st.divider()
     
