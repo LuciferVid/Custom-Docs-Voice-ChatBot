@@ -64,41 +64,58 @@ class FAISSVectorStore:
             logger.error(f"Indexing Engine Failure for {doc_name}: {e}")
             raise Exception(f"Intelligence System Error: {str(e)}")
 
-    def search(self, query: str, top_k: int = 5, filter_doc: str = None) -> list[dict]:
+    def search(self, query: str, top_k: int = 4, filter_doc: str = None, distance_threshold: float = 1.5) -> list[dict]:
         if self.index is None or not self.chunks:
             logger.error("Search attempted on empty index.")
             raise Exception("No intelligence context currently loaded. Please sync your documents.")
             
         try:
+            logger.info(f"Searching index with dimension {self.index.d} for query: {query}")
             query_embedding = generate_embedding(query)
             if not query_embedding:
+                logger.error("Failed to generate query embedding.")
                 return []
                 
             query_embedding_np = np.array([query_embedding]).astype('float32')
             
             if query_embedding_np.shape[1] != self.index.d:
-                logger.error(f"Search dimension mismatch: {query_embedding_np.shape[1]} vs {self.index.d}")
+                logger.error(f"Intelligence Brain Mismatch: Query uses {query_embedding_np.shape[1]} dims, but Index uses {self.index.d} dims. Please re-sync documents.")
                 return []
 
-            distances, indices = self.index.search(query_embedding_np, top_k * 2)
+            # Fetch a moderate pool of candidates to filter from
+            fetch_k = min(len(self.chunks), top_k * 2)
+            distances, indices = self.index.search(query_embedding_np, fetch_k)
             
-            # ... rest of search logic ...
             results = []
             if len(indices) > 0:
+                logger.info(f"FAISS fetched {len(indices[0])} candidates (threshold={distance_threshold}).")
                 for i in range(len(indices[0])):
                     idx = indices[0][i]
                     if idx == -1 or idx >= len(self.chunks):
                         continue
                         
                     chunk = self.chunks[idx].copy()
-                    chunk["score"] = float(distances[0][i])
+                    dist = float(distances[0][i])
+                    chunk["score"] = dist
                     
+                    # Document filter
                     if filter_doc and chunk.get("source_file") != filter_doc:
                         continue
-                        
+                    
+                    # ── Relevance gate ────────────────────────────────────
+                    # L2 distance: lower = more similar.  Skip chunks that
+                    # are too far from the query to be genuinely useful.
+                    if dist > distance_threshold:
+                        logger.info(f"Skipped (too distant): {chunk.get('source_file')} — dist={dist:.4f}")
+                        continue
+                    
+                    logger.info(f"Match: {chunk.get('source_file')} — dist={dist:.4f} ✓")
                     results.append(chunk)
                     if len(results) >= top_k:
                         break
+            
+            if not results:
+                logger.warning("No chunks passed the relevance threshold.")
             return results
         except Exception as e:
             logger.error(f"Search failure: {e}")

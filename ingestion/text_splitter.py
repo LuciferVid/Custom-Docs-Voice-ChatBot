@@ -1,4 +1,4 @@
-def split_into_chunks(pages: list[dict], chunk_size: int = 500, chunk_overlap: int = 50) -> list[dict]:
+def split_into_chunks(pages: list[dict], chunk_size: int = 800, chunk_overlap: int = 100) -> list[dict]:
     """
     Splits document pages into chunks natively without LangChain.
     Preserves metadata and adds chunk index.

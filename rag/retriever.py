@@ -1,4 +1,4 @@
-def retrieve_context(query: str, vector_store, top_k: int = 5, filter_doc: str = None) -> tuple[str, list[str]]:
+def retrieve_context(query: str, vector_store, top_k: int = 4, filter_doc: str = None) -> tuple[str, list[str]]:
     """
     Retrieves relevant chunks from the vector store and formats them as context.
     Returns (context_string, list_of_sources).
