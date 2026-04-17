@@ -53,7 +53,7 @@ def play_audio(text):
     Synthesizes speech from text using the backend and plays it in the browser.
     """
     try:
-        resp = requests.post(f"{BACKEND_URL}/chat/voice-output", json={"text": text}, timeout=15)
+        resp = requests.post(f"{BACKEND_URL}/chat/voice-output", json={"text": text}, timeout=30)
         if resp.status_code == 200:
             b64_audio = base64.b64encode(resp.content).decode()
             audio_html = f'<audio autoplay="true" src="data:audio/mp3;base64,{b64_audio}">'
@@ -127,10 +127,10 @@ def process_query(query, is_audio=False, audio_data=None):
     if is_audio and audio_data:
         with st.spinner("Processing Signal..."):
             files = {"audio": ("signal.wav", audio_data, "audio/wav")}
-            resp = requests.post(f"{BACKEND_URL}/chat/voice-input", files=files, timeout=15)
+            resp = requests.post(f"{BACKEND_URL}/chat/voice-input", files=files, timeout=60)
     else:
         with st.spinner("Analyzing Intelligence..." if not (query and query.strip()) else "Finding Answer..."):
-            resp = requests.post(f"{BACKEND_URL}/chat", json=payload, timeout=15)
+            resp = requests.post(f"{BACKEND_URL}/chat", json=payload, timeout=60)
         
     if resp.status_code == 200:
         result = resp.json()
