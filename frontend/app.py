@@ -55,9 +55,7 @@ def play_audio(text):
     try:
         resp = requests.post(f"{BACKEND_URL}/chat/voice-output", json={"text": text}, timeout=30)
         if resp.status_code == 200:
-            b64_audio = base64.b64encode(resp.content).decode()
-            audio_html = f'<audio autoplay="true" src="data:audio/mp3;base64,{b64_audio}">'
-            st.markdown(audio_html, unsafe_allow_html=True)
+            st.audio(resp.content, format="audio/mp3", autoplay=True)
     except Exception as e:
         st.error(f"Audio Synthesis Failed: {e}")
 
