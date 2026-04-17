@@ -280,13 +280,40 @@ else:
 
 # Input Control (Always Visible)
 st.write("---")
+
+if "pending_query" not in st.session_state:
+    st.session_state.pending_query = None
+
+def on_enter():
+    if st.session_state.text_input.strip():
+        st.session_state.pending_query = st.session_state.text_input
+        st.session_state.text_input = ""
+
 c1, c2, c3 = st.columns([10, 1, 1], vertical_alignment="bottom")
 with c1:
-    user_input = st.text_input("Summarize, ask a question, or find insights...", key="text_input", label_visibility="collapsed")
+    st.text_input("Summarize, ask a question, or find insights...", key="text_input", label_visibility="collapsed", on_change=on_enter)
 with c2:
     audio_stream = audio_recorder(text="", icon_size="2x", neutral_color="#2563eb")
 with c3:
     send_trigger = st.button("Analyze", use_container_width=True)
 
-if (send_trigger) or audio_stream:
-    process_query(user_input, is_audio=True if audio_stream else False, audio_data=audio_stream)
+query_to_process = None
+if send_trigger:
+    # Handle button click
+    if st.session_state.text_input.strip():
+        query_to_process = st.session_state.text_input
+        st.session_state.text_input = ""
+    elif st.session_state.pending_query:
+        query_to_process = st.session_state.pending_query
+        st.session_state.pending_query = None
+    else:
+        # Fallback for empty analyze button click
+        query_to_process = "Please provide a comprehensive summary of the latest intelligence."
+elif st.session_state.pending_query:
+    query_to_process = st.session_state.pending_query
+    st.session_state.pending_query = None
+
+if query_to_process:
+    process_query(query_to_process)
+elif audio_stream:
+    process_query("", is_audio=True, audio_data=audio_stream)
