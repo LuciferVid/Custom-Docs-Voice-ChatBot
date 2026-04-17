@@ -9,7 +9,9 @@ from typing import Optional
 import io
 from google import genai
 from groq import Groq
+# Load environment variables early so internal modules receive them during import
 from dotenv import load_dotenv
+load_dotenv()
 
 from ingestion.document_loader import load_document
 from ingestion.text_splitter import split_into_chunks
@@ -20,9 +22,6 @@ from rag.memory import ConversationMemory
 from rag.chain import get_answer
 from voice.speech_to_text import transcribe_audio
 from voice.text_to_speech import synthesize_speech
-
-# Load environment variables
-load_dotenv()
 
 app = FastAPI(title="Voice RAG Chatbot API")
 
