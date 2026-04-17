@@ -17,7 +17,7 @@ def get_answer(query: str, vector_store, memory, gemini_client, filter_doc: str 
         try:
             prompt = REPHRASE_PROMPT.format(history=history, query=query)
             response = gemini_client.models.generate_content(
-                model="gemini-1.5-flash",
+                model="gemini-flash-latest",
                 contents=prompt,
                 config={"temperature": 0}
             )
@@ -38,7 +38,7 @@ def get_answer(query: str, vector_store, memory, gemini_client, filter_doc: str 
             prompt = RAG_PROMPT.format(history=history, context=context, query=rephrased_query)
 
         response = gemini_client.models.generate_content(
-            model="gemini-1.5-flash",
+            model="gemini-flash-latest",
             contents=prompt,
             config={"temperature": 0}
         )
