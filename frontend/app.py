@@ -45,6 +45,19 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+def play_audio(text):
+    """
+    Synthesizes speech from text using the backend and plays it in the browser.
+    """
+    try:
+        resp = requests.post(f"{BACKEND_URL}/chat/voice-output", json={"text": text}, timeout=15)
+        if resp.status_code == 200:
+            b64_audio = base64.b64encode(resp.content).decode()
+            audio_html = f'<audio autoplay="true" src="data:audio/mp3;base64,{b64_audio}">'
+            st.markdown(audio_html, unsafe_allow_html=True)
+    except Exception as e:
+        st.error(f"Audio Synthesis Failed: {e}")
+
 # Session state initialization
 def get_docs():
     try:
