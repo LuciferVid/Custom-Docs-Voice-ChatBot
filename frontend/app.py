@@ -44,6 +44,10 @@ st.markdown("""
         border-radius: 6px; padding: 0.5rem 1rem; font-weight: 500;
     }
     
+    /* HIDE THE AUDIO PLAYER COMPONENT COMPLETELY */
+    audio { display: none !important; }
+    div[data-testid="stAudio"] { display: none !important; height: 0px !important; margin: 0px !important; padding: 0px !important; }
+    
     #MainMenu, footer, header {visibility: hidden;}
 </style>
 """, unsafe_allow_html=True)
@@ -138,7 +142,6 @@ def process_query(query, is_audio=False, audio_data=None):
             play_audio(result["answer"])
         st.rerun()
     elif resp.status_code in [404, 400]:
-        # ULTIMATE AUTO-RESCUE: If context is lost, attempt to re-sync everything on deck
         if "on_deck" in st.session_state and st.session_state.on_deck:
             st.warning("📡 Intelligence signal lost. Auto-restoring brain... please wait.")
             success = sync_intelligence(st.session_state.on_deck)
@@ -149,7 +152,8 @@ def process_query(query, is_audio=False, audio_data=None):
                 process_query(query, is_audio, audio_data)
                 return
         
-        st.error("⚠️ Intelligence Context Lost. Please ensure your files are still visible in the sidebar and try again.")
+        st.session_state.messages.append({"role": "user", "content": effective_query})
+        st.session_state.messages.append({"role": "assistant", "content": "⚠️ **Intelligence Context Lost**: There are no documents currently loaded. Please upload and sync a document in the sidebar to begin analysis."})
         st.rerun()
     else:
         try:
