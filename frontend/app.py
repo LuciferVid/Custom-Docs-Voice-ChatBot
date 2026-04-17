@@ -315,7 +315,11 @@ elif st.session_state.pending_query:
     query_to_process = st.session_state.pending_query
     st.session_state.pending_query = None
 
+if "last_audio_bytes" not in st.session_state:
+    st.session_state.last_audio_bytes = None
+
 if query_to_process:
     process_query(query_to_process)
-elif audio_stream:
+elif audio_stream and audio_stream != st.session_state.last_audio_bytes:
+    st.session_state.last_audio_bytes = audio_stream
     process_query("", is_audio=True, audio_data=audio_stream)
