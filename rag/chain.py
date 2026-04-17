@@ -26,14 +26,25 @@ def get_answer(query: str, vector_store, memory, gemini_client, filter_doc: str 
         except Exception as e:
             logger.error(f"Error rephrasing query with Gemini: {e}")
             
-    # Step 2: Retrieve context (Will raise Exception if vector store is empty)
+    # Step 2: Retrieve context
+    logger.info(f"Retrieving context for query: {rephrased_query}")
     context, sources = retrieve_context(rephrased_query, vector_store, filter_doc=filter_doc)
+    
+    # Context Diagnostic
+    if context and "No relevant context" not in context:
+        logger.info(f"Retrieved {len(sources)} sources. Context snippet: {context[:200]}...")
+    else:
+        logger.warning("No relevant context found in the brain.")
     
     # Step 3: Generate answer
     try:
         # If no relevant context found, but vector store exists
         if not context or "No relevant context" in context:
-            prompt = f"Answer this question based on your general knowledge but mention you couldn't find specific details in the documents: {rephrased_query}"
+            prompt = f"""You are 'Intelligence Core', an advanced AI assistant. 
+The user asked: "{rephrased_query}"
+
+If this is a casual greeting or general conversation, respond naturally and helpfully without mentioning documents.
+If it is a factual question, answer using your general knowledge, but politely note that the specific detail was not found in the uploaded documents."""
         else:
             prompt = RAG_PROMPT.format(history=history, context=context, query=rephrased_query)
 
