@@ -18,16 +18,25 @@ def generate_embedding(text: str) -> list[float]:
     client = get_client()
     try:
         result = client.models.embed_content(
-            model="embedding-001",
+            model="gemini-embedding-001",
             contents=text
         )
         # Handle different response formats in SDK
-        if hasattr(result.embeddings[0], 'values'):
-            return result.embeddings[0].values
-        return result.embeddings[0]
+        embedding = result.embeddings[0]
+        return embedding.values if hasattr(embedding, 'values') else embedding
     except Exception as e:
         logger.error(f"Cloud Embedding Error: {e}")
-        raise ValueError(f"Failed to generate embedding: {str(e)}")
+        # Secondary fallback if text-embedding-004 is not available
+        try:
+             result = client.models.embed_content(
+                model="text-embedding-004",
+                contents=text
+            )
+             embedding = result.embeddings[0]
+             return embedding.values if hasattr(embedding, 'values') else embedding
+        except Exception as e2:
+             logger.error(f"Fallback Embedding Error: {e2}")
+             raise ValueError(f"Failed to generate embedding: {str(e2)}")
 
 def generate_embeddings_batch(texts: list[str]) -> list[list[float]]:
     """
@@ -39,17 +48,19 @@ def generate_embeddings_batch(texts: list[str]) -> list[list[float]]:
     client = get_client()
     try:
         result = client.models.embed_content(
-            model="embedding-001",
+            model="gemini-embedding-001",
             contents=texts
         )
-        # Robust parsing for list of Embedding objects
-        embeddings = []
-        for e in result.embeddings:
-            if hasattr(e, 'values'):
-                embeddings.append(e.values)
-            else:
-                embeddings.append(e)
-        return embeddings
+        return [e.values if hasattr(e, 'values') else e for e in result.embeddings]
     except Exception as e:
         logger.error(f"Cloud Batch Embedding Error: {e}")
-        raise ValueError(f"Failed to generate batch embeddings: {str(e)}")
+        # Secondary fallback
+        try:
+             result = client.models.embed_content(
+                model="text-embedding-004",
+                contents=texts
+            )
+             return [e.values if hasattr(e, 'values') else e for e in result.embeddings]
+        except Exception as e2:
+             logger.error(f"Fallback Batch Embedding Error: {e2}")
+             raise ValueError(f"Failed to generate batch embeddings: {str(e2)}")
