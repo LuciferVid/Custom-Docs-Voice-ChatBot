@@ -1,22 +1,24 @@
 import logging
 import os
+import io
 
 logger = logging.getLogger(__name__)
 
-def transcribe_audio(audio_bytes: bytes, gemini_client, file_format: str = "wav") -> str:
+def transcribe_audio(audio_bytes: bytes, groq_client, file_format: str = "wav") -> str:
     """
-    Transcribes audio using Gemini's multimodal capabilities (completely free).
+    Transcribes audio using Groq's blazing fast Whisper-Large-v3 model.
     """
     try:
-        # Gemini can process audio directly as bytes
-        response = gemini_client.models.generate_content(
-            model="gemini-1.5-flash",
-            contents=[
-                {"text": "Transcribe this audio accurately. If it is a question about a document, emphasize the key keywords."},
-                {"inline_data": {"mime_type": "audio/wav", "data": audio_bytes}}
-            ]
+        # Wrap bytes in a file-like object with a name so Groq accepts it
+        audio_file = io.BytesIO(audio_bytes)
+        audio_file.name = f"audio.{file_format}"
+        
+        response = groq_client.audio.transcriptions.create(
+            file=audio_file,
+            model="whisper-large-v3-turbo",
+            response_format="text"
         )
-        return response.text.strip()
+        return response.strip()
     except Exception as e:
-        logger.error(f"Error transcribing with Gemini: {e}")
+        logger.error(f"Error transcribing with Groq: {e}")
         return ""

@@ -4,10 +4,10 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-def get_answer(query: str, vector_store, memory, gemini_client, filter_doc: str = None) -> dict:
+def get_answer(query: str, vector_store, memory, groq_client, filter_doc: str = None) -> dict:
     """
-    Orchestrates the RAG process using Google Gemini.
-    Pure Gemini version for high-performance retrieval.
+    Orchestrates the RAG process using Groq's high-speed inference.
+    Pure Groq version for high-performance retrieval.
     """
     history = memory.get_history()
     
@@ -16,15 +16,15 @@ def get_answer(query: str, vector_store, memory, gemini_client, filter_doc: str 
     if history:
         try:
             prompt = REPHRASE_PROMPT.format(history=history, query=query)
-            response = gemini_client.models.generate_content(
-                model="gemini-flash-latest",
-                contents=prompt,
-                config={"temperature": 0}
+            response = groq_client.chat.completions.create(
+                model="llama-3.1-8b-instant",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0
             )
-            rephrased_query = response.text.strip()
+            rephrased_query = response.choices[0].message.content.strip()
             logger.info(f"Rephrased query: {rephrased_query}")
         except Exception as e:
-            logger.error(f"Error rephrasing query with Gemini: {e}")
+            logger.error(f"Error rephrasing query with Groq: {e}")
             
     # Step 2: Retrieve context
     logger.info(f"Retrieving context for query: {rephrased_query}")
@@ -48,23 +48,23 @@ If it is a factual question, answer using your general knowledge, but politely n
         else:
             prompt = RAG_PROMPT.format(history=history, context=context, query=rephrased_query)
 
-        response = gemini_client.models.generate_content(
-            model="gemini-flash-latest",
-            contents=prompt,
-            config={"temperature": 0}
+        response = groq_client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0
         )
-        answer_text = response.text.strip()
+        answer_text = response.choices[0].message.content.strip()
     except Exception as e:
-        logger.error(f"Error generating answer with Gemini: {e}")
+        logger.error(f"Error generating answer with Groq: {e}")
         error_msg = str(e)
         
         # Identify if this is a context loss issue
         if "No intelligence context" in error_msg or "empty index" in error_msg:
              raise Exception("Intelligence context lost. Please re-sync.")
              
-        # Identify if this is a quota or rate limit issue from Google
+        # Identify if this is a quota or rate limit issue
         if "429" in error_msg or "RESOURCE_EXHAUSTED" in error_msg or "quota" in error_msg.lower():
-             answer_text = "⚠️ **API Quota Exceeded**: I've reached my Google Gemini API rate limit or daily quota. Please wait a bit or upgrade your API key plan."
+             answer_text = "⚠️ **API Quota Exceeded**: I've reached my Groq limits. Please wait a bit."
         else:
              answer_text = "I'm having trouble connecting to the AI brain right now. Please try again in a moment."
 

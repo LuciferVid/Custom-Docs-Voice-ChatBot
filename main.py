@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from typing import Optional
 import io
 from google import genai
+from groq import Groq
 from dotenv import load_dotenv
 
 from ingestion.document_loader import load_document
@@ -36,6 +37,17 @@ def get_gemini_client():
             raise ValueError("GEMINI_API_KEY is not set in environment variables.")
         _gemini_client = genai.Client(api_key=api_key)
     return _gemini_client
+
+_groq_client = None
+
+def get_groq_client():
+    global _groq_client
+    if _groq_client is None:
+        api_key = os.getenv("GROQ_API_KEY")
+        if not api_key:
+            raise ValueError("GROQ_API_KEY is not set in environment variables.")
+        _groq_client = Groq(api_key=api_key)
+    return _groq_client
 
 vector_store = FAISSVectorStore()
 memory = ConversationMemory()
@@ -108,7 +120,7 @@ async def chat(request: ChatRequest):
             request.query, 
             vector_store, 
             memory, 
-            gemini_client=get_gemini_client(),
+            groq_client=get_groq_client(),
             filter_doc=request.filter_doc
         )
         return response
@@ -125,8 +137,8 @@ async def chat_voice_input(audio: UploadFile = File(...)):
     """
     try:
         audio_bytes = await audio.read()
-        client = get_gemini_client()
-        transcription = transcribe_audio(audio_bytes, gemini_client=client)
+        groq_client = get_groq_client()
+        transcription = transcribe_audio(audio_bytes, groq_client=groq_client)
         
         if not transcription:
             return {"answer": "I couldn't hear you clearly.", "transcription": ""}
@@ -135,7 +147,7 @@ async def chat_voice_input(audio: UploadFile = File(...)):
             transcription, 
             vector_store, 
             memory, 
-            gemini_client=client
+            groq_client=groq_client
         )
         response["transcription"] = transcription
         return response
@@ -204,15 +216,15 @@ async def get_suggestions(doc_name: str):
         context = "\n---\n".join(relevant_chunks)
         prompt = SUGGEST_PROMPT.format(context=context)
         
-        client = get_gemini_client()
-        response = client.models.generate_content(
-            model="gemini-flash-latest",
-            contents=prompt,
-            config={"temperature": 0.5}
+        client = get_groq_client()
+        response = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.5
         )
         
         # Parse JSON list from response
-        text = response.text.replace("```json", "").replace("```", "").strip()
+        text = response.choices[0].message.content.replace("```json", "").replace("```", "").strip()
         try:
             suggestions = json.loads(text)
             return suggestions[:3]
