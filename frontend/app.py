@@ -4,6 +4,9 @@ import os
 from audio_recorder_streamlit import audio_recorder
 import time
 import base64
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # --- Configuration ---
 # Production Backend URL
