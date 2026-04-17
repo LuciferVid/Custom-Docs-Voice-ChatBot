@@ -56,10 +56,17 @@ If it is a factual question, answer using your general knowledge, but politely n
         answer_text = response.text.strip()
     except Exception as e:
         logger.error(f"Error generating answer with Gemini: {e}")
+        error_msg = str(e)
+        
         # Identify if this is a context loss issue
-        if "No intelligence context" in str(e) or "empty index" in str(e):
+        if "No intelligence context" in error_msg or "empty index" in error_msg:
              raise Exception("Intelligence context lost. Please re-sync.")
-        answer_text = "I'm having trouble connecting to the AI brain right now. Please try again in a moment."
+             
+        # Identify if this is a quota or rate limit issue from Google
+        if "429" in error_msg or "RESOURCE_EXHAUSTED" in error_msg or "quota" in error_msg.lower():
+             answer_text = "⚠️ **API Quota Exceeded**: I've reached my Google Gemini API rate limit or daily quota. Please wait a bit or upgrade your API key plan."
+        else:
+             answer_text = "I'm having trouble connecting to the AI brain right now. Please try again in a moment."
 
     # Step 4: Update memory
     memory.add_message("user", query)
