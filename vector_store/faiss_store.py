@@ -172,6 +172,13 @@ class FAISSVectorStore:
                 except:
                     self.chunks = []
                     self.doc_registry = {}
+        
+        # Integrity Check: Index and metadata must be in sync
+        if self.index and len(self.chunks) != self.index.ntotal:
+            logger.warning(f"Integrity Mismatch: Index has {self.index.ntotal} vectors but Metadata has {len(self.chunks)} chunks. Resetting context.")
+            self.index = None
+            self.chunks = []
+            self.doc_registry = {}
                 
     def get_documents(self) -> list[dict]:
         docs = []
