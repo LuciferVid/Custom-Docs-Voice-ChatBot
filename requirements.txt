@@ -10,5 +10,6 @@ pydantic
 numpy
 audio-recorder-streamlit
 python-multipart
+google-genai
 groq
 gTTS
