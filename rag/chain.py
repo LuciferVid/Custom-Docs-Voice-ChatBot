@@ -49,17 +49,39 @@ def get_answer(query: str, vector_store, memory, gemini_client, filter_doc: str 
     sources = []
 
     def call_gemini(prompt):
+        # We try the best models for 2026 first
+        model_options = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-flash-latest"]
+        
+        last_error = None
+        for model_id in model_options:
+            try:
+                response = gemini_client.models.generate_content(
+                    model=model_id,
+                    contents=prompt
+                )
+                if response and hasattr(response, 'text'):
+                    return response.text.strip()
+            except Exception as e:
+                last_error = str(e)
+                logger.warning(f"Model {model_id} failed: {e}")
+                continue
+        
+        # If all predefined models fail, try to list available models and use the first 'flash' one
         try:
-            response = gemini_client.models.generate_content(
-                model="gemini-1.5-flash",
-                contents=prompt
-            )
-            if not response or not hasattr(response, 'text'):
-                 raise ValueError("Gemini returned an empty response or was blocked by safety filters.")
-            return response.text.strip()
-        except Exception as e:
-            logger.error(f"Gemini API Error: {e}")
-            raise e
+            available_models = gemini_client.models.list()
+            for m in available_models:
+                if "flash" in m.name.lower() and "generateContent" in m.supported_generation_methods:
+                    # Clean the name (remove 'models/' prefix if present)
+                    clean_name = m.name.split("/")[-1]
+                    try:
+                        response = gemini_client.models.generate_content(model=clean_name, contents=prompt)
+                        return response.text.strip()
+                    except:
+                        continue
+        except:
+            pass
+
+        raise Exception(f"All Gemini models failed. Last error: {last_error}")
 
     # ── Step 0: Intent gate ───────────────────────────────────────────
     if _is_casual(query):
