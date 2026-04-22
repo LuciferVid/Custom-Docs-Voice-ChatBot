@@ -48,18 +48,26 @@ def get_answer(query: str, vector_store, memory, gemini_client, filter_doc: str 
     history = memory.get_history()
     sources = []
 
-    # ── Step 0: Intent gate ───────────────────────────────────────────
-    if _is_casual(query):
-        logger.info(f"Casual intent detected — skipping retrieval for: {query}")
+    def call_gemini(prompt):
         try:
-            prompt = CASUAL_PROMPT.format(history=history, query=query)
             response = gemini_client.models.generate_content(
                 model="gemini-1.5-flash",
                 contents=prompt
             )
-            answer_text = response.text.strip()
+            if not response or not hasattr(response, 'text'):
+                 raise ValueError("Gemini returned an empty response or was blocked by safety filters.")
+            return response.text.strip()
         except Exception as e:
-            logger.error(f"Error in casual response: {e}")
+            logger.error(f"Gemini API Error: {e}")
+            raise e
+
+    # ── Step 0: Intent gate ───────────────────────────────────────────
+    if _is_casual(query):
+        logger.info(f"Casual intent detected — skipping retrieval")
+        try:
+            prompt = CASUAL_PROMPT.format(history=history, query=query)
+            answer_text = call_gemini(prompt)
+        except Exception as e:
             answer_text = "Hey! I'm here and ready to help. Ask me anything about your documents! 👋"
 
         memory.add_message("user", query)
@@ -71,22 +79,17 @@ def get_answer(query: str, vector_store, memory, gemini_client, filter_doc: str 
             "rephrased_query": query,
         }
 
-    # ── Step 1: Rephrase query if history exists ──────────────────────
+    # ── Step 1: Rephrase query ────────────────────────────────────────
     rephrased_query = query
     if history:
         try:
             prompt = REPHRASE_PROMPT.format(history=history, query=query)
-            response = gemini_client.models.generate_content(
-                model="gemini-1.5-flash",
-                contents=prompt
-            )
-            rephrased_query = response.text.strip()
+            rephrased_query = call_gemini(prompt)
             logger.info(f"Rephrased query: {rephrased_query}")
-        except Exception as e:
-            logger.error(f"Error rephrasing query with Gemini: {e}")
+        except:
+            pass # Keep original query if rephrasing fails
             
-    # ── Step 2: Retrieve context (with relevance filtering) ───────────
-    logger.info(f"Retrieving context for query: {rephrased_query}")
+    # ── Step 2: Retrieve context ──────────────────────────────────────
     context, sources = retrieve_context(rephrased_query, vector_store, filter_doc=filter_doc)
     
     # ── Step 3: Generate answer ───────────────────────────────────────
@@ -96,19 +99,15 @@ def get_answer(query: str, vector_store, memory, gemini_client, filter_doc: str 
         else:
             prompt = RAG_PROMPT.format(history=history, context=context, query=rephrased_query)
 
-        response = gemini_client.models.generate_content(
-            model="gemini-1.5-flash",
-            contents=prompt
-        )
-        answer_text = response.text.strip()
+        answer_text = call_gemini(prompt)
     except Exception as e:
-        logger.error(f"Error generating answer with Gemini: {e}")
         error_msg = str(e)
-        
-        if "429" in error_msg or "RESOURCE_EXHAUSTED" in error_msg:
-             answer_text = "⚠️ **API Quota Exceeded**: I've reached my free limits for now. Please try again shortly."
+        if "429" in error_msg or "QUOTA" in error_msg.upper():
+            answer_text = "⚠️ **Gemini Limit Reached**: Please try again in a few minutes."
+        elif "API_KEY_INVALID" in error_msg:
+            answer_text = "⚠️ **Invalid API Key**: Please check your GEMINI_API_KEY in the environment settings."
         else:
-             answer_text = "I'm having trouble connecting to my AI brain. Please try again in a moment."
+            answer_text = "I'm having trouble connecting to the AI brain. Please try again in a moment."
 
     # ── Step 4: Update memory ─────────────────────────────────────────
     memory.add_message("user", query)
@@ -120,4 +119,6 @@ def get_answer(query: str, vector_store, memory, gemini_client, filter_doc: str 
         "chunks_used": len(sources),
         "rephrased_query": rephrased_query
     }
+
+
 

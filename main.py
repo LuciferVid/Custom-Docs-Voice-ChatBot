@@ -44,7 +44,7 @@ def get_groq_client():
     if _groq_client is None:
         api_key = os.getenv("GROQ_API_KEY")
         if not api_key:
-            raise ValueError("GROQ_API_KEY is not set in environment variables.")
+            return None
         _groq_client = Groq(api_key=api_key)
     return _groq_client
 
@@ -110,11 +110,6 @@ async def chat(request: ChatRequest):
     Text chat endpoint using Gemini.
     """
     try:
-        # Check if index is empty
-        docs = vector_store.get_documents()
-        if not docs:
-            raise HTTPException(status_code=400, detail="Intelligence context lost. Please re-sync your documents in the sidebar.")
-            
         response = get_answer(
             request.query, 
             vector_store, 
