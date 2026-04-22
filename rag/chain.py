@@ -6,8 +6,6 @@ import re
 logger = logging.getLogger(__name__)
 
 # ── Intent Detection ──────────────────────────────────────────────────
-# Fast keyword-based classifier to avoid wasting a retrieval call on greetings.
-
 _CASUAL_PATTERNS = re.compile(
     r"^\s*("
     r"h(i|ey|ello|owdy|ola)"
@@ -31,65 +29,33 @@ _CASUAL_PATTERNS = re.compile(
     re.IGNORECASE,
 )
 
-
 def _is_casual(query: str) -> bool:
     """Return True if the query is clearly conversational / not document-related."""
     cleaned = query.strip()
-    # Very short messages (<6 words) that match casual patterns
     if len(cleaned.split()) <= 6 and _CASUAL_PATTERNS.match(cleaned):
         return True
     return False
 
-
-def get_answer(query: str, vector_store, memory, gemini_client, filter_doc: str = None) -> dict:
+def get_answer(query: str, vector_store, memory, groq_client, filter_doc: str = None) -> dict:
     """
-    Orchestrates the RAG process using Gemini 1.5 Flash (High Limit Free Tier).
+    Orchestrates the RAG process using Groq exclusively.
     """
     history = memory.get_history()
     sources = []
-
-    def call_gemini(prompt):
-        # We try the best models for 2026 first
-        model_options = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-flash-latest"]
-        
-        last_error = None
-        for model_id in model_options:
-            try:
-                response = gemini_client.models.generate_content(
-                    model=model_id,
-                    contents=prompt
-                )
-                if response and hasattr(response, 'text'):
-                    return response.text.strip()
-            except Exception as e:
-                last_error = str(e)
-                logger.warning(f"Model {model_id} failed: {e}")
-                continue
-        
-        # If all predefined models fail, try to list available models and use the first 'flash' one
-        try:
-            available_models = gemini_client.models.list()
-            for m in available_models:
-                if "flash" in m.name.lower() and "generateContent" in m.supported_generation_methods:
-                    # Clean the name (remove 'models/' prefix if present)
-                    clean_name = m.name.split("/")[-1]
-                    try:
-                        response = gemini_client.models.generate_content(model=clean_name, contents=prompt)
-                        return response.text.strip()
-                    except:
-                        continue
-        except:
-            pass
-
-        raise Exception(f"All Gemini models failed. Last error: {last_error}")
 
     # ── Step 0: Intent gate ───────────────────────────────────────────
     if _is_casual(query):
         logger.info(f"Casual intent detected — skipping retrieval")
         try:
             prompt = CASUAL_PROMPT.format(history=history, query=query)
-            answer_text = call_gemini(prompt)
+            response = groq_client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.7,
+            )
+            answer_text = response.choices[0].message.content.strip()
         except Exception as e:
+            logger.error(f"Error in casual response: {e}")
             answer_text = "Hey! I'm here and ready to help. Ask me anything about your documents! 👋"
 
         memory.add_message("user", query)
@@ -106,10 +72,15 @@ def get_answer(query: str, vector_store, memory, gemini_client, filter_doc: str 
     if history:
         try:
             prompt = REPHRASE_PROMPT.format(history=history, query=query)
-            rephrased_query = call_gemini(prompt)
+            response = groq_client.chat.completions.create(
+                model="llama-3.1-8b-instant",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0
+            )
+            rephrased_query = response.choices[0].message.content.strip()
             logger.info(f"Rephrased query: {rephrased_query}")
         except:
-            pass # Keep original query if rephrasing fails
+            pass
             
     # ── Step 2: Retrieve context ──────────────────────────────────────
     context, sources = retrieve_context(rephrased_query, vector_store, filter_doc=filter_doc)
@@ -121,16 +92,19 @@ def get_answer(query: str, vector_store, memory, gemini_client, filter_doc: str 
         else:
             prompt = RAG_PROMPT.format(history=history, context=context, query=rephrased_query)
 
-        answer_text = call_gemini(prompt)
+        response = groq_client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0
+        )
+        answer_text = response.choices[0].message.content.strip()
     except Exception as e:
+        logger.error(f"Groq Error: {e}")
         error_msg = str(e)
-        if "429" in error_msg or "QUOTA" in error_msg.upper():
-            answer_text = "⚠️ **Gemini Limit Reached**: Please try again in a few minutes."
-        elif "API_KEY_INVALID" in error_msg:
-            answer_text = "⚠️ **Invalid API Key**: Please check your GEMINI_API_KEY in the environment settings."
+        if "429" in error_msg:
+            answer_text = "⚠️ **Groq Limit Reached**: Your high-speed quota is full. Please wait a moment."
         else:
-            answer_text = f"⚠️ **AI Brain Connection Error**: {error_msg}"
-
+            answer_text = "I'm having trouble connecting to Groq. Please try again in a moment."
 
     # ── Step 4: Update memory ─────────────────────────────────────────
     memory.add_message("user", query)
@@ -142,6 +116,3 @@ def get_answer(query: str, vector_store, memory, gemini_client, filter_doc: str 
         "chunks_used": len(sources),
         "rephrased_query": rephrased_query
     }
-
-
-
