@@ -107,7 +107,8 @@ def get_answer(query: str, vector_store, memory, gemini_client, filter_doc: str 
         elif "API_KEY_INVALID" in error_msg:
             answer_text = "⚠️ **Invalid API Key**: Please check your GEMINI_API_KEY in the environment settings."
         else:
-            answer_text = "I'm having trouble connecting to the AI brain. Please try again in a moment."
+            answer_text = f"⚠️ **AI Brain Connection Error**: {error_msg}"
+
 
     # ── Step 4: Update memory ─────────────────────────────────────────
     memory.add_message("user", query)
