@@ -119,7 +119,7 @@ async def chat(request: ChatRequest):
             request.query, 
             vector_store, 
             memory, 
-            groq_client=get_groq_client(),
+            gemini_client=get_gemini_client(),
             filter_doc=request.filter_doc
         )
         return response
@@ -136,8 +136,8 @@ async def chat_voice_input(audio: UploadFile = File(...)):
     """
     try:
         audio_bytes = await audio.read()
-        groq_client = get_groq_client()
-        transcription = transcribe_audio(audio_bytes, groq_client=groq_client)
+        gemini_client = get_gemini_client()
+        transcription = transcribe_audio(audio_bytes, gemini_client=gemini_client)
         
         if not transcription:
             return {"answer": "I couldn't hear you clearly.", "transcription": ""}
@@ -146,7 +146,7 @@ async def chat_voice_input(audio: UploadFile = File(...)):
             transcription, 
             vector_store, 
             memory, 
-            groq_client=groq_client
+            gemini_client=gemini_client
         )
         response["transcription"] = transcription
         return response
@@ -215,15 +215,14 @@ async def get_suggestions(doc_name: str):
         context = "\n---\n".join(relevant_chunks)
         prompt = SUGGEST_PROMPT.format(context=context)
         
-        client = get_groq_client()
-        response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.5
+        client = get_gemini_client()
+        response = client.models.generate_content(
+            model="gemini-1.5-flash",
+            contents=prompt
         )
         
         # Parse JSON list from response
-        text = response.choices[0].message.content.replace("```json", "").replace("```", "").strip()
+        text = response.text.replace("```json", "").replace("```", "").strip()
         try:
             suggestions = json.loads(text)
             return suggestions[:3]

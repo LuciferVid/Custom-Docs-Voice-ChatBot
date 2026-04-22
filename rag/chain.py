@@ -41,10 +41,9 @@ def _is_casual(query: str) -> bool:
     return False
 
 
-def get_answer(query: str, vector_store, memory, groq_client, filter_doc: str = None) -> dict:
+def get_answer(query: str, vector_store, memory, gemini_client, filter_doc: str = None) -> dict:
     """
-    Orchestrates the RAG process using Groq's high-speed inference.
-    Includes intent detection to skip retrieval for casual messages.
+    Orchestrates the RAG process using Gemini 1.5 Flash (High Limit Free Tier).
     """
     history = memory.get_history()
     sources = []
@@ -54,12 +53,11 @@ def get_answer(query: str, vector_store, memory, groq_client, filter_doc: str = 
         logger.info(f"Casual intent detected — skipping retrieval for: {query}")
         try:
             prompt = CASUAL_PROMPT.format(history=history, query=query)
-            response = groq_client.chat.completions.create(
-                model="llama-3.3-70b-versatile",
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.7,
+            response = gemini_client.models.generate_content(
+                model="gemini-1.5-flash",
+                contents=prompt
             )
-            answer_text = response.choices[0].message.content.strip()
+            answer_text = response.text.strip()
         except Exception as e:
             logger.error(f"Error in casual response: {e}")
             answer_text = "Hey! I'm here and ready to help. Ask me anything about your documents! 👋"
@@ -78,25 +76,18 @@ def get_answer(query: str, vector_store, memory, groq_client, filter_doc: str = 
     if history:
         try:
             prompt = REPHRASE_PROMPT.format(history=history, query=query)
-            response = groq_client.chat.completions.create(
-                model="llama-3.1-8b-instant",
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0
+            response = gemini_client.models.generate_content(
+                model="gemini-1.5-flash",
+                contents=prompt
             )
-            rephrased_query = response.choices[0].message.content.strip()
+            rephrased_query = response.text.strip()
             logger.info(f"Rephrased query: {rephrased_query}")
         except Exception as e:
-            logger.error(f"Error rephrasing query with Groq: {e}")
+            logger.error(f"Error rephrasing query with Gemini: {e}")
             
     # ── Step 2: Retrieve context (with relevance filtering) ───────────
     logger.info(f"Retrieving context for query: {rephrased_query}")
     context, sources = retrieve_context(rephrased_query, vector_store, filter_doc=filter_doc)
-    
-    # Context Diagnostic
-    if context and "No relevant context" not in context:
-        logger.info(f"Retrieved {len(sources)} sources. Context snippet: {context[:200]}...")
-    else:
-        logger.warning("No relevant context found in the brain.")
     
     # ── Step 3: Generate answer ───────────────────────────────────────
     try:
@@ -105,25 +96,19 @@ def get_answer(query: str, vector_store, memory, groq_client, filter_doc: str = 
         else:
             prompt = RAG_PROMPT.format(history=history, context=context, query=rephrased_query)
 
-        response = groq_client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0
+        response = gemini_client.models.generate_content(
+            model="gemini-1.5-flash",
+            contents=prompt
         )
-        answer_text = response.choices[0].message.content.strip()
+        answer_text = response.text.strip()
     except Exception as e:
-        logger.error(f"Error generating answer with Groq: {e}")
+        logger.error(f"Error generating answer with Gemini: {e}")
         error_msg = str(e)
         
-        # Identify if this is a context loss issue
-        if "No intelligence context" in error_msg or "empty index" in error_msg:
-             raise Exception("Intelligence context lost. Please re-sync.")
-             
-        # Identify if this is a quota or rate limit issue
-        if "429" in error_msg or "RESOURCE_EXHAUSTED" in error_msg or "quota" in error_msg.lower():
-             answer_text = "⚠️ **API Quota Exceeded**: I've reached my Groq limits. Please wait a bit."
+        if "429" in error_msg or "RESOURCE_EXHAUSTED" in error_msg:
+             answer_text = "⚠️ **API Quota Exceeded**: I've reached my free limits for now. Please try again shortly."
         else:
-             answer_text = "I'm having trouble connecting to the AI brain right now. Please try again in a moment."
+             answer_text = "I'm having trouble connecting to my AI brain. Please try again in a moment."
 
     # ── Step 4: Update memory ─────────────────────────────────────────
     memory.add_message("user", query)
@@ -135,3 +120,4 @@ def get_answer(query: str, vector_store, memory, groq_client, filter_doc: str = 
         "chunks_used": len(sources),
         "rephrased_query": rephrased_query
     }
+
