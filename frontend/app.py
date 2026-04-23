@@ -120,6 +120,9 @@ def sync_intelligence(files_to_sync):
                     st.error(f"❌ {f.name} Sync Failed: {err_msg}")
             except Exception as e:
                 st.error(f"⚠️ {f.name} Signal Lost: {str(e)}")
+            
+            # Brief pause to let backend breathe
+            time.sleep(0.5)
     return success_count
 
 def process_query(query, is_audio=False, audio_data=None):

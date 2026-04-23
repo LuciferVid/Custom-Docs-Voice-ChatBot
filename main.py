@@ -56,24 +56,35 @@ class TTSRequest(BaseModel):
     text: str
 
 @app.post("/upload")
-async def upload_document(file: UploadFile = File(...)):
+def upload_document(file: UploadFile = File(...)):
     file_path = os.path.join("data/uploaded_docs", file.filename)
+    print(f"Received upload request for: {file.filename}")
     try:
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
+        
+        print(f"Loading document: {file.filename}")
         pages = load_document(file_path)
         if not pages:
             if os.path.exists(file_path): os.remove(file_path)
+            print(f"Empty document: {file.filename}")
             raise HTTPException(status_code=400, detail="Document contains no extractable text.")
+        
+        print(f"Splitting into chunks: {file.filename}")
         chunks = split_into_chunks(pages)
+        
+        print(f"Adding to vector store: {file.filename}")
         vector_store.add_document(chunks, file.filename)
+        
+        print(f"Successfully processed: {file.filename}")
         return {"doc_name": file.filename, "status": "success"}
     except Exception as e:
+        print(f"Upload failed for {file.filename}: {e}")
         if os.path.exists(file_path): os.remove(file_path)
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/chat")
-async def chat(request: ChatRequest):
+def chat(request: ChatRequest):
     try:
         response = get_answer(
             request.query, 
@@ -101,7 +112,7 @@ async def chat_voice_input(audio: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/chat/voice-output")
-async def chat_voice_output(request: TTSRequest):
+def chat_voice_output(request: TTSRequest):
     try:
         audio_content = synthesize_speech(request.text)
         return StreamingResponse(io.BytesIO(audio_content), media_type="audio/mpeg")
@@ -129,7 +140,7 @@ async def chat_history():
     return memory.to_list()
 
 @app.get("/documents/{doc_name}/suggestions")
-async def get_suggestions(doc_name: str):
+def get_suggestions(doc_name: str):
     try:
         relevant_chunks = [c["text"] for c in vector_store.chunks if c.get("source_file") == doc_name][:3]
         if not relevant_chunks: return ["Summarize this document"]

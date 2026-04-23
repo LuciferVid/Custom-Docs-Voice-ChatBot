@@ -41,26 +41,38 @@ def generate_embedding(text: str) -> list[float]:
 def generate_embeddings_batch(texts: list[str]) -> list[list[float]]:
     """
     Generates embeddings for a batch using Gemini's Cloud API.
+    Handles Gemini's internal batch limits (max 100 per call).
     """
     if not texts:
         return []
         
     client = get_client()
-    try:
-        result = client.models.embed_content(
-            model="gemini-embedding-001",
-            contents=texts
-        )
-        return [e.values if hasattr(e, 'values') else e for e in result.embeddings]
-    except Exception as e:
-        logger.error(f"Cloud Batch Embedding Error: {e}")
-        # Secondary fallback
+    all_embeddings = []
+    
+    # Gemini API has a limit of 100 items per request
+    batch_size = 100
+    
+    for i in range(0, len(texts), batch_size):
+        batch = texts[i:i + batch_size]
         try:
-             result = client.models.embed_content(
-                model="text-embedding-004",
-                contents=texts
+            result = client.models.embed_content(
+                model="gemini-embedding-001",
+                contents=batch
             )
-             return [e.values if hasattr(e, 'values') else e for e in result.embeddings]
-        except Exception as e2:
-             logger.error(f"Fallback Batch Embedding Error: {e2}")
-             raise ValueError(f"Failed to generate batch embeddings: {str(e2)}")
+            embeddings = [e.values if hasattr(e, 'values') else e for e in result.embeddings]
+            all_embeddings.extend(embeddings)
+        except Exception as e:
+            logger.error(f"Cloud Batch Embedding Error (Batch {i//batch_size}): {e}")
+            # Fallback to text-embedding-004
+            try:
+                result = client.models.embed_content(
+                    model="text-embedding-004",
+                    contents=batch
+                )
+                embeddings = [e.values if hasattr(e, 'values') else e for e in result.embeddings]
+                all_embeddings.extend(embeddings)
+            except Exception as e2:
+                logger.error(f"Fallback Batch Embedding Error (Batch {i//batch_size}): {e2}")
+                raise ValueError(f"Failed to generate batch embeddings: {str(e2)}")
+                
+    return all_embeddings

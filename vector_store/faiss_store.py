@@ -3,6 +3,7 @@ import faiss
 import numpy as np
 import json
 import logging
+import threading
 from datetime import datetime
 from ingestion.embeddings import generate_embeddings_batch, generate_embedding
 
@@ -18,6 +19,7 @@ class FAISSVectorStore:
         self.index = None
         self.chunks = []
         self.doc_registry = {}
+        self.lock = threading.Lock()
         
         if not os.path.exists(self.index_dir):
             os.makedirs(self.index_dir)
@@ -38,27 +40,28 @@ class FAISSVectorStore:
             embeddings = generate_embeddings_batch(texts)
             embeddings_np = np.array(embeddings).astype('float32')
             
-            # Dimension Validation
-            dimension = embeddings_np.shape[1]
-            if self.index is None:
-                self.index = faiss.IndexFlatL2(dimension)
-            elif self.index.d != dimension:
-                logger.warning(f"Dimension shift (Index: {self.index.d}, New: {dimension}). Brain Resetting.")
-                self.index = faiss.IndexFlatL2(dimension)
-                self.chunks = []
-                self.doc_registry = {}
+            with self.lock:
+                # Dimension Validation
+                dimension = embeddings_np.shape[1]
+                if self.index is None:
+                    self.index = faiss.IndexFlatL2(dimension)
+                elif self.index.d != dimension:
+                    logger.warning(f"Dimension shift (Index: {self.index.d}, New: {dimension}). Brain Resetting.")
+                    self.index = faiss.IndexFlatL2(dimension)
+                    self.chunks = []
+                    self.doc_registry = {}
 
-            self.index.add(embeddings_np)
-            self.chunks.extend(chunks)
-            
-            # Detailed tracking
-            self.doc_registry[doc_name] = {
-                "chunk_count": len(chunks),
-                "added_at": datetime.now().isoformat(),
-                "status": "indexed"
-            }
-            self.save()
-            logger.info(f"Successfully indexed {doc_name} with {len(chunks)} chunks.")
+                self.index.add(embeddings_np)
+                self.chunks.extend(chunks)
+                
+                # Detailed tracking
+                self.doc_registry[doc_name] = {
+                    "chunk_count": len(chunks),
+                    "added_at": datetime.now().isoformat(),
+                    "status": "indexed"
+                }
+                self.save()
+                logger.info(f"Successfully indexed {doc_name} with {len(chunks)} chunks.")
             
         except Exception as e:
             logger.error(f"Indexing Engine Failure for {doc_name}: {e}")
@@ -122,30 +125,31 @@ class FAISSVectorStore:
             raise Exception(f"Analysis engine failure: {str(e)}")
 
     def delete_document(self, doc_name: str):
-        if doc_name not in self.doc_registry:
-            return
+        with self.lock:
+            if doc_name not in self.doc_registry:
+                return
+                
+            self.chunks = [c for c in self.chunks if c.get("source_file") != doc_name]
+            if doc_name in self.doc_registry:
+                del self.doc_registry[doc_name]
             
-        self.chunks = [c for c in self.chunks if c.get("source_file") != doc_name]
-        if doc_name in self.doc_registry:
-            del self.doc_registry[doc_name]
-        
-        if not self.chunks:
-            self.index = None
-        else:
-            # Rebuild index
-            texts = [chunk["text"] for chunk in self.chunks]
-            try:
-                embeddings = generate_embeddings_batch(texts)
-                if embeddings:
-                    embeddings_np = np.array(embeddings).astype('float32')
-                    self.index = faiss.IndexFlatL2(embeddings_np.shape[1])
-                    self.index.add(embeddings_np)
-                else:
-                    self.index = None
-            except:
+            if not self.chunks:
                 self.index = None
-            
-        self.save()
+            else:
+                # Rebuild index
+                texts = [chunk["text"] for chunk in self.chunks]
+                try:
+                    embeddings = generate_embeddings_batch(texts)
+                    if embeddings:
+                        embeddings_np = np.array(embeddings).astype('float32')
+                        self.index = faiss.IndexFlatL2(embeddings_np.shape[1])
+                        self.index.add(embeddings_np)
+                    else:
+                        self.index = None
+                except:
+                    self.index = None
+                
+            self.save()
 
     def save(self):
         if not os.path.exists(self.index_dir):
@@ -157,28 +161,29 @@ class FAISSVectorStore:
             json.dump(metadata, f)
 
     def load(self):
-        if os.path.exists(self.index_path):
-            try:
-                self.index = faiss.read_index(self.index_path)
-            except:
-                self.index = None
-            
-        if os.path.exists(self.metadata_path):
-            with open(self.metadata_path, 'r') as f:
+        with self.lock:
+            if os.path.exists(self.index_path):
                 try:
-                    metadata = json.load(f)
-                    self.chunks = metadata.get("chunks", [])
-                    self.doc_registry = metadata.get("doc_registry", {})
+                    self.index = faiss.read_index(self.index_path)
                 except:
-                    self.chunks = []
-                    self.doc_registry = {}
-        
-        # Integrity Check: Index and metadata must be in sync
-        if self.index and len(self.chunks) != self.index.ntotal:
-            logger.warning(f"Integrity Mismatch: Index has {self.index.ntotal} vectors but Metadata has {len(self.chunks)} chunks. Resetting context.")
-            self.index = None
-            self.chunks = []
-            self.doc_registry = {}
+                    self.index = None
+                
+            if os.path.exists(self.metadata_path):
+                with open(self.metadata_path, 'r') as f:
+                    try:
+                        metadata = json.load(f)
+                        self.chunks = metadata.get("chunks", [])
+                        self.doc_registry = metadata.get("doc_registry", {})
+                    except:
+                        self.chunks = []
+                        self.doc_registry = {}
+            
+            # Integrity Check: Index and metadata must be in sync
+            if self.index and len(self.chunks) != self.index.ntotal:
+                logger.warning(f"Integrity Mismatch: Index has {self.index.ntotal} vectors but Metadata has {len(self.chunks)} chunks. Resetting context.")
+                self.index = None
+                self.chunks = []
+                self.doc_registry = {}
                 
     def get_documents(self) -> list[dict]:
         docs = []

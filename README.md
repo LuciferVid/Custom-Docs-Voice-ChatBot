@@ -9,7 +9,10 @@ An enterprise-grade, high-performance RAG (Retrieval-Augmented Generation) ecosy
 - **Vector Embeddings**: Cloud-native `text-embedding-004` for zero-latency, high-dimensional semantic search.
 - **Voice Pipeline**: Bidirectional audio processing using Gemini STT and high-fidelity gTTS.
 
-### ⚡ Performance Optimization
+### ⚡ Performance & Stability
+- **Multi-File Concurrent Sync**: Optimized for simultaneous processing of 4+ documents without performance degradation.
+- **Thread-Safe Architecture**: Implemented system-wide locking for the FAISS engine to prevent context corruption during concurrent writes.
+- **API Batch Processing**: Intelligent batching logic for Google Gemini API to handle massive document ingestion within cloud limits.
 - **Cloud-Native Design**: Replaced local heavy ML dependencies with cloud APIs, reducing memory footprint by 90% (<50MB RAM).
 - **Stateless Stability**: Optimized for high-availability deployment on containerized environments like Render.
 - **Lazy Initialization**: Implemented deferred client loading to ensure near-instant platform startup.
@@ -17,7 +20,7 @@ An enterprise-grade, high-performance RAG (Retrieval-Augmented Generation) ecosy
 ### 📁 Data Handling
 - **Multi-Format Support**: Native extraction for PDF, DOCX, TXT, and MD.
 - **Context Management**: Adaptive sliding-window chunking logic for precise retrieval.
-- **Vector Storage**: Proximity-based search using the Meta FAISS engine.
+- **Vector Storage**: Proximity-based search using the Meta FAISS engine with thread-safe persistence.
 
 ## Quick Connection
 
