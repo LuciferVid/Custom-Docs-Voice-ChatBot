@@ -5,11 +5,16 @@ from google import genai
 logger = logging.getLogger(__name__)
 
 # No local model loading = Zero RAM usage
+_client = None
+
 def get_client():
-    api_key = os.getenv("GEMINI_API_KEY")
-    if not api_key:
-        raise ValueError("GEMINI_API_KEY is not set.")
-    return genai.Client(api_key=api_key)
+    global _client
+    if _client is None:
+        api_key = os.getenv("GEMINI_API_KEY")
+        if not api_key:
+            raise ValueError("GEMINI_API_KEY is not set.")
+        _client = genai.Client(api_key=api_key)
+    return _client
 
 def generate_embedding(text: str) -> list[float]:
     """

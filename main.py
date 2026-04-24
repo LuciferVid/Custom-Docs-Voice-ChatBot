@@ -1,12 +1,14 @@
 # Voice Chatbot with RAG - Version 1.2.0 (Groq Priority)
 import os
 import shutil
-from fastapi import FastAPI, UploadFile, File, HTTPException, Body
+from fastapi import FastAPI, UploadFile, File, HTTPException, Body, Header, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import Optional
 import io
+import asyncio
+from datetime import datetime, timedelta
 from groq import Groq
 from dotenv import load_dotenv
 
@@ -48,9 +50,45 @@ def get_state(session_id: str):
         os.makedirs(session_dir, exist_ok=True)
         _sessions[session_id] = {
             "vector_store": FAISSVectorStore(index_dir=session_dir),
-            "memory": ConversationMemory()
+            "memory": ConversationMemory(),
+            "last_accessed": datetime.now()
         }
+    else:
+        _sessions[session_id]["last_accessed"] = datetime.now()
     return _sessions[session_id]
+
+async def session_cleanup_loop():
+    """Background task to prune old sessions and their local storage."""
+    while True:
+        await asyncio.sleep(3600)  # Check every hour
+        now = datetime.now()
+        expired_ids = [
+            sid for sid, state in _sessions.items() 
+            if now - state["last_accessed"] > timedelta(hours=24)
+        ]
+        
+        for sid in expired_ids:
+            try:
+                # Cleanup FAISS index directory
+                session_dir = f"faiss_index/{sid}"
+                if os.path.exists(session_dir):
+                    shutil.rmtree(session_dir)
+                
+                # Cleanup uploaded documents for this session
+                upload_dir = "data/uploaded_docs"
+                if os.path.exists(upload_dir):
+                    for f in os.listdir(upload_dir):
+                        if f.startswith(f"{sid}_"):
+                            os.remove(os.path.join(upload_dir, f))
+                
+                del _sessions[sid]
+                print(f"Purged expired session: {sid}")
+            except Exception as e:
+                print(f"Failed to cleanup session {sid}: {e}")
+
+@app.on_event("startup")
+async def startup_event():
+    asyncio.create_task(session_cleanup_loop())
 
 app.add_middleware(
     CORSMiddleware,
@@ -75,22 +113,24 @@ def upload_document(file: UploadFile = File(...), x_session_id: str = Header(Non
     state = get_state(x_session_id)
     v_store = state["vector_store"]
     
-    file_path = os.path.join("data/uploaded_docs", f"{x_session_id}_{file.filename}")
-    print(f"Received upload request for: {file.filename} (Session: {x_session_id})")
+    # Sanitize filename to prevent path traversal
+    safe_filename = os.path.basename(file.filename)
+    file_path = os.path.join("data/uploaded_docs", f"{x_session_id}_{safe_filename}")
+    print(f"Received upload request for: {safe_filename} (Session: {x_session_id})")
     try:
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
         
-        print(f"Loading document: {file.filename}")
+        print(f"Loading document: {safe_filename}")
         pages = load_document(file_path)
         if not pages:
             if os.path.exists(file_path): os.remove(file_path)
             raise HTTPException(status_code=400, detail="Document contains no extractable text.")
         
         chunks = split_into_chunks(pages)
-        v_store.add_document(chunks, file.filename)
+        v_store.add_document(chunks, safe_filename)
         
-        return {"doc_name": file.filename, "status": "success"}
+        return {"doc_name": safe_filename, "status": "success"}
     except Exception as e:
         print(f"Upload failed: {e}")
         if os.path.exists(file_path): os.remove(file_path)
@@ -143,8 +183,10 @@ async def list_documents(x_session_id: str = Header(None)):
 @app.delete("/documents/{doc_name}")
 async def delete_document(doc_name: str, x_session_id: str = Header(None)):
     state = get_state(x_session_id)
-    state["vector_store"].delete_document(doc_name)
-    file_path = os.path.join("data/uploaded_docs", f"{x_session_id}_{doc_name}")
+    # Sanitize filename to prevent path traversal
+    safe_doc_name = os.path.basename(doc_name)
+    state["vector_store"].delete_document(safe_doc_name)
+    file_path = os.path.join("data/uploaded_docs", f"{x_session_id}_{safe_doc_name}")
     if os.path.exists(file_path): os.remove(file_path)
     return {"status": "success"}
 
