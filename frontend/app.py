@@ -6,11 +6,19 @@ import time
 import base64
 from dotenv import load_dotenv
 
+import uuid
+
 load_dotenv()
 
 # --- Configuration ---
 # Production Backend URL
 BACKEND_URL = os.getenv("BACKEND_URL", "https://custom-docs-voice-chatbot.onrender.com")
+
+# Session ID Management
+if "session_id" not in st.session_state:
+    st.session_state.session_id = str(uuid.uuid4())
+
+SESSION_HEADERS = {"X-Session-ID": st.session_state.session_id}
 
 st.set_page_config(page_title="Intelligence Core | RAG", page_icon="🔗", layout="wide")
 
@@ -57,7 +65,7 @@ def play_audio(text):
     Synthesizes speech from text using the backend and plays it in the browser.
     """
     try:
-        resp = requests.post(f"{BACKEND_URL}/chat/voice-output", json={"text": text}, timeout=30)
+        resp = requests.post(f"{BACKEND_URL}/chat/voice-output", json={"text": text}, headers=SESSION_HEADERS, timeout=30)
         if resp.status_code == 200:
             st.audio(resp.content, format="audio/mp3", autoplay=True)
     except Exception as e:
@@ -66,7 +74,7 @@ def play_audio(text):
 # Session state initialization
 def get_docs():
     try:
-        resp = requests.get(f"{BACKEND_URL}/documents")
+        resp = requests.get(f"{BACKEND_URL}/documents", headers=SESSION_HEADERS)
         if resp.status_code == 200:
             return resp.json()
         return []
@@ -75,7 +83,7 @@ def get_docs():
 
 if "messages" not in st.session_state:
     try:
-        resp = requests.get(f"{BACKEND_URL}/chat/history", timeout=2)
+        resp = requests.get(f"{BACKEND_URL}/chat/history", headers=SESSION_HEADERS, timeout=2)
         st.session_state.messages = resp.json() if resp.status_code == 200 else []
     except:
         st.session_state.messages = []
@@ -91,7 +99,7 @@ if "docs" not in st.session_state:
     st.session_state.docs = None
 
 try:
-    docs_resp = requests.get(f"{BACKEND_URL}/documents?t={time.time()}", timeout=15)
+    docs_resp = requests.get(f"{BACKEND_URL}/documents?t={time.time()}", headers=SESSION_HEADERS, timeout=15)
     if docs_resp.status_code == 200:
         st.session_state.docs = docs_resp.json()
     else:
@@ -111,7 +119,7 @@ def sync_intelligence(files_to_sync):
             try:
                 # 180s timeout for massive files on Render
                 files = {"file": (f.name, f.getvalue())}
-                resp = requests.post(f"{BACKEND_URL}/upload", files=files, timeout=180)
+                resp = requests.post(f"{BACKEND_URL}/upload", files=files, headers=SESSION_HEADERS, timeout=180)
                 if resp.status_code == 200:
                     st.toast(f"✅ Indexed: {f.name}")
                     success_count += 1
@@ -132,10 +140,10 @@ def process_query(query, is_audio=False, audio_data=None):
     if is_audio and audio_data:
         with st.spinner("Processing Signal..."):
             files = {"audio": ("signal.wav", audio_data, "audio/wav")}
-            resp = requests.post(f"{BACKEND_URL}/chat/voice-input", files=files, timeout=60)
+            resp = requests.post(f"{BACKEND_URL}/chat/voice-input", files=files, headers=SESSION_HEADERS, timeout=60)
     else:
         with st.spinner("Analyzing Intelligence..." if not (query and query.strip()) else "Finding Answer..."):
-            resp = requests.post(f"{BACKEND_URL}/chat", json=payload, timeout=60)
+            resp = requests.post(f"{BACKEND_URL}/chat", json=payload, headers=SESSION_HEADERS, timeout=60)
         
     if resp.status_code == 200:
         result = resp.json()
@@ -205,7 +213,7 @@ with st.sidebar:
             col1.markdown(f"🔹 **{doc['doc_name']}**")
             col1.caption(f"📡 {chunks} Intelligence Chunks Digested")
             if col2.button("🗑️", key=f"del_{doc['doc_name']}"):
-                requests.delete(f"{BACKEND_URL}/documents/{doc['doc_name']}", timeout=15)
+                requests.delete(f"{BACKEND_URL}/documents/{doc['doc_name']}", headers=SESSION_HEADERS, timeout=15)
                 st.rerun()
     else:
         st.caption("No intelligence context currently loaded.")
@@ -217,7 +225,7 @@ with st.sidebar:
     col_a, col_b = st.columns(2)
     with col_a:
         if st.button("Reset Chat", use_container_width=True):
-            try: requests.post(f"{BACKEND_URL}/chat/clear", timeout=10)
+            try: requests.post(f"{BACKEND_URL}/chat/clear", headers=SESSION_HEADERS, timeout=10)
             except: pass
             st.session_state.messages = []
             st.rerun()
@@ -226,8 +234,8 @@ with st.sidebar:
             try:
                 # Delete all docs found
                 for doc in st.session_state.docs:
-                    requests.delete(f"{BACKEND_URL}/documents/{doc['doc_name']}", timeout=10)
-                requests.post(f"{BACKEND_URL}/chat/clear", timeout=10)
+                    requests.delete(f"{BACKEND_URL}/documents/{doc['doc_name']}", headers=SESSION_HEADERS, timeout=10)
+                requests.post(f"{BACKEND_URL}/chat/clear", headers=SESSION_HEADERS, timeout=10)
             except: pass
             st.session_state.messages = []
             st.session_state.docs = []
@@ -247,7 +255,7 @@ if current_latest_doc != st.session_state.last_doc:
     st.session_state.last_doc = current_latest_doc
     if current_latest_doc:
         try:
-            s_resp = requests.get(f"{BACKEND_URL}/documents/{current_latest_doc}/suggestions?t={time.time()}")
+            s_resp = requests.get(f"{BACKEND_URL}/documents/{current_latest_doc}/suggestions?t={time.time()}", headers=SESSION_HEADERS)
             st.session_state.suggestions = s_resp.json() if s_resp.status_code == 200 else []
         except:
             st.session_state.suggestions = []
