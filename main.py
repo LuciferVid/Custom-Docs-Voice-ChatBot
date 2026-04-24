@@ -127,6 +127,10 @@ def upload_document(file: UploadFile = File(...), x_session_id: str = Header(Non
             if os.path.exists(file_path): os.remove(file_path)
             raise HTTPException(status_code=400, detail="Document contains no extractable text.")
         
+        # Strip session ID from page metadata for clean citations
+        for p in pages:
+            p["source_file"] = safe_filename
+            
         chunks = split_into_chunks(pages)
         v_store.add_document(chunks, safe_filename)
         
