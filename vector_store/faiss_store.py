@@ -69,8 +69,8 @@ class FAISSVectorStore:
 
     def search(self, query: str, top_k: int = 4, filter_doc: str = None, distance_threshold: float = 1.5) -> list[dict]:
         if self.index is None or not self.chunks:
-            logger.error("Search attempted on empty index.")
-            raise Exception("No active intelligence context found. Please click the '🚀 Sync to Intelligence' button in the sidebar to process your documents.")
+            logger.info("Search attempted on empty index — returning empty results.")
+            return []
             
         try:
             logger.info(f"Searching index with dimension {self.index.d} for query: {query}")
