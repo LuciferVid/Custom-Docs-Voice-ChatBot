@@ -196,17 +196,21 @@ with st.sidebar:
     
     # Track files for auto-sync and rescue
     if uploaded_files:
-        st.session_state.on_deck = uploaded_files
-        current_docs = st.session_state.docs if st.session_state.docs is not None else []
-        files_to_sync = [f for f in uploaded_files if not any(d['doc_name'] == f.name for d in current_docs)]
-        
-        if files_to_sync:
-            st.info(f"📡 {len(files_to_sync)} file(s) ready for initialization.")
-            if st.button("🚀 Sync to Intelligence", use_container_width=True):
-                success_count = sync_intelligence(files_to_sync)
-                if success_count > 0:
-                    time.sleep(1)
-                    st.rerun()
+        if len(uploaded_files) > 3:
+            st.warning("⚠️ **Safety Limit**: Please upload at most 3 documents at a time to prevent API rate-limiting.")
+            st.session_state.on_deck = []
+        else:
+            st.session_state.on_deck = uploaded_files
+            current_docs = st.session_state.docs if st.session_state.docs is not None else []
+            files_to_sync = [f for f in uploaded_files if not any(d['doc_name'] == f.name for d in current_docs)]
+            
+            if files_to_sync:
+                st.info(f"📡 {len(files_to_sync)} file(s) ready for initialization.")
+                if st.button("🚀 Sync to Intelligence", use_container_width=True):
+                    success_count = sync_intelligence(files_to_sync)
+                    if success_count > 0:
+                        time.sleep(1)
+                        st.rerun()
     else:
         st.session_state.on_deck = []
 
