@@ -145,45 +145,78 @@ def process_query(query, is_audio=False, audio_data=None):
     effective_query = query if query and query.strip() else "Please provide a comprehensive summary of the latest intelligence."
     payload = {"query": effective_query, "filter_doc": None}
     
+    # Pre-render user message for immediate feedback
+    st.session_state.messages.append({"role": "user", "content": effective_query})
+    
+    # Audio processing remains non-streaming for transcription
     if is_audio and audio_data:
-        with st.spinner("Processing Signal..."):
+        with st.status("📡 Processing Audio Signal...", expanded=False) as status:
             files = {"audio": ("signal.wav", audio_data, "audio/wav")}
             resp = requests.post(f"{BACKEND_URL}/chat/voice-input", files=files, headers=SESSION_HEADERS, timeout=60)
-    else:
-        with st.spinner("Analyzing Intelligence..." if not (query and query.strip()) else "Finding Answer..."):
-            resp = requests.post(f"{BACKEND_URL}/chat", json=payload, headers=SESSION_HEADERS, timeout=60)
-        
-    if resp.status_code == 200:
-        result = resp.json()
-        st.session_state.messages.append({"role": "user", "content": result.get("transcription", effective_query)})
-        st.session_state.messages.append({"role": "assistant", "content": result["answer"]})
-        if st.session_state.auto_play:
-            play_audio(result["answer"])
-        st.rerun()
-    elif resp.status_code in [404, 400]:
-        if "on_deck" in st.session_state and st.session_state.on_deck:
-            st.warning("📡 Intelligence signal lost. Auto-restoring brain... please wait.")
-            success = sync_intelligence(st.session_state.on_deck)
-            if success > 0:
-                # Retry the query ONE TIME
-                st.info("⭐ Signal restored! Retrying your question...")
-                time.sleep(1)
-                process_query(query, is_audio, audio_data)
+            if resp.status_code == 200:
+                result = resp.json()
+                # Update user message with actual transcription
+                st.session_state.messages[-1]["content"] = result.get("transcription", effective_query)
+                answer = result["answer"]
+                st.session_state.messages.append({"role": "assistant", "content": answer})
+                if st.session_state.auto_play:
+                    play_audio(answer)
+                st.rerun()
+            else:
+                st.error("Audio signal lost. Please try again.")
                 return
-        
-        st.session_state.messages.append({"role": "user", "content": effective_query})
-        st.session_state.messages.append({"role": "assistant", "content": "⚠️ **Intelligence Context Lost**: There are no documents currently loaded. Please upload and sync a document in the sidebar to begin analysis."})
-        st.rerun()
-    else:
+
+    # Text query with STREAMING
+    full_answer = ""
+    sources = []
+    
+    with st.status("🧠 Consulting Intelligence Core...", expanded=True) as status:
         try:
-            error_data = resp.json()
-            detail = error_data.get("detail", "The Intelligence System encountered an unknown signal error.")
-        except:
-            detail = "The AI context could not be reached. Please verify the backend signal status."
+            with requests.post(f"{BACKEND_URL}/chat/stream", json=payload, headers=SESSION_HEADERS, stream=True, timeout=120) as r:
+                if r.status_code != 200:
+                    st.error("Signal Lost: Intelligence core is unreachable.")
+                    return
+                
+                # Create a placeholder for the streaming answer
+                answer_placeholder = st.empty()
+                
+                for line in r.iter_lines():
+                    if line:
+                        data = json.loads(line.decode('utf-8').replace('data: ', ''))
+                        
+                        if data["type"] == "rephrased":
+                            status.update(label=f"🔍 Searching: {data['content']}")
+                        
+                        elif data["type"] == "sources":
+                            sources = data["content"]
+                            status.update(label=f"📄 Found {len(sources)} relevant context points.")
+                        
+                        elif data["type"] == "chunk":
+                            full_answer += data["content"]
+                            # Preview the answer in a temporary bubble style
+                            answer_placeholder.markdown(f"""
+                            <div class="assistant-bubble">
+                                {full_answer} ▌
+                            </div>
+                            """, unsafe_allow_html=True)
+                            
+                        elif data["type"] == "done":
+                            full_answer = data["answer"]
+                            sources = data["sources"]
+                            status.update(label="✅ Analysis Complete", state="complete")
+                        
+                        elif data["type"] == "error":
+                            st.error(f"Intelligence Error: {data['content']}")
+                            return
+
+            # Finalize
+            st.session_state.messages.append({"role": "assistant", "content": full_answer})
+            if st.session_state.auto_play:
+                play_audio(full_answer)
+            st.rerun()
             
-        st.session_state.messages.append({"role": "user", "content": effective_query})
-        st.session_state.messages.append({"role": "assistant", "content": f"⚠️ **Signal Loss**: {detail}"})
-        st.rerun()
+        except Exception as e:
+            st.error(f"📡 Connection Reset: {str(e)}")
 
 # Sidebar
 with st.sidebar:

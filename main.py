@@ -20,7 +20,7 @@ from vector_store.faiss_store import FAISSVectorStore
 from prompts.templates import SUGGEST_PROMPT
 import json
 from rag.memory import ConversationMemory
-from rag.chain import get_answer
+from rag.chain import get_answer, get_answer_stream
 from voice.speech_to_text import transcribe_audio
 from voice.text_to_speech import synthesize_speech
 
@@ -139,6 +139,29 @@ def upload_document(file: UploadFile = File(...), x_session_id: str = Header(Non
         print(f"Upload failed: {e}")
         if os.path.exists(file_path): os.remove(file_path)
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/chat/stream")
+async def chat_stream(request: ChatRequest, x_session_id: str = Header(None)):
+    state = get_state(x_session_id)
+    
+    async def event_generator():
+        try:
+            # We wrap the synchronous generator to be usable in FastAPI
+            gen = get_answer_stream(
+                request.query, 
+                state["vector_store"], 
+                state["memory"], 
+                groq_client=get_groq_client(),
+                filter_doc=request.filter_doc
+            )
+            for item in gen:
+                yield f"data: {json.dumps(item)}\n\n"
+                await asyncio.sleep(0.01) # Small yield for event loop
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n"
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 @app.post("/chat")
 def chat(request: ChatRequest, x_session_id: str = Header(None)):

@@ -50,16 +50,19 @@ def _is_summary_request(query: str) -> bool:
     ]
     return any(re.search(p, query, re.IGNORECASE) for p in patterns)
 
-def get_answer(query: str, vector_store, memory, groq_client, filter_doc: str = None) -> dict:
+def get_answer_stream(query: str, vector_store, memory, groq_client, filter_doc: str = None):
     """
-    Orchestrates the RAG process using Groq exclusively.
+    Generator that yields answer chunks for streaming.
+    Yields:
+        {"type": "rephrased", "content": ...}
+        {"type": "sources", "content": ...}
+        {"type": "chunk", "content": ...}
+        {"type": "done", "answer": ..., "sources": ...}
     """
     history = memory.get_history()
-    sources = []
-
+    
     # ── Step 0: Intent gate ───────────────────────────────────────────
     if _is_casual(query):
-        logger.info(f"Casual intent detected — skipping retrieval")
         try:
             prompt = CASUAL_PROMPT.format(history=history, query=query)
             response = groq_client.chat.completions.create(
@@ -68,18 +71,13 @@ def get_answer(query: str, vector_store, memory, groq_client, filter_doc: str = 
                 temperature=0.7,
             )
             answer_text = response.choices[0].message.content.strip()
+            yield {"type": "done", "answer": answer_text, "sources": []}
+            memory.add_message("user", query)
+            memory.add_message("assistant", answer_text, metadata={"sources": []})
+            return
         except Exception as e:
-            logger.error(f"Error in casual response: {e}")
-            answer_text = "Hey! I'm here and ready to help. Ask me anything about your documents! 👋"
-
-        memory.add_message("user", query)
-        memory.add_message("assistant", answer_text, metadata={"sources": []})
-        return {
-            "answer": answer_text,
-            "sources": [],
-            "chunks_used": 0,
-            "rephrased_query": query,
-        }
+            yield {"type": "error", "content": str(e)}
+            return
 
     # ── Step 1: Rephrase query ────────────────────────────────────────
     rephrased_query = query
@@ -92,43 +90,65 @@ def get_answer(query: str, vector_store, memory, groq_client, filter_doc: str = 
                 temperature=0
             )
             rephrased_query = response.choices[0].message.content.strip()
-            logger.info(f"Rephrased query: {rephrased_query}")
+            yield {"type": "rephrased", "content": rephrased_query}
         except:
             pass
             
     # ── Step 2: Retrieve context ──────────────────────────────────────
-    # Increase context depth for summary/analysis requests
     top_k = 15 if _is_summary_request(query) or _is_summary_request(rephrased_query) else 4
     context, sources = retrieve_context(rephrased_query, vector_store, top_k=top_k, filter_doc=filter_doc)
+    yield {"type": "sources", "content": sources}
     
-    # ── Step 3: Generate answer ───────────────────────────────────────
+    # ── Step 3: Generate answer (Streaming) ───────────────────────────
     try:
         if not context or "No relevant context" in context:
             prompt = CASUAL_PROMPT.format(history=history, query=rephrased_query)
         else:
             prompt = RAG_PROMPT.format(history=history, context=context, query=rephrased_query)
 
-        response = groq_client.chat.completions.create(
+        stream = groq_client.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=[{"role": "user", "content": prompt}],
-            temperature=0
+            temperature=0,
+            stream=True
         )
-        answer_text = response.choices[0].message.content.strip()
+        
+        full_answer = ""
+        for chunk in stream:
+            content = chunk.choices[0].delta.content
+            if content:
+                full_answer += content
+                yield {"type": "chunk", "content": content}
+                
+        # ── Step 4: Update memory ─────────────────────────────────────
+        memory.add_message("user", query)
+        memory.add_message("assistant", full_answer, metadata={"sources": sources})
+        
+        yield {"type": "done", "answer": full_answer, "sources": sources}
+        
     except Exception as e:
-        logger.error(f"Groq Error: {e}")
-        error_msg = str(e)
-        if "429" in error_msg:
-            answer_text = "⚠️ **Groq Limit Reached**: Your high-speed quota is full. Please wait a moment."
-        else:
-            answer_text = "I'm having trouble connecting to Groq. Please try again in a moment."
+        logger.error(f"Streaming Error: {e}")
+        yield {"type": "error", "content": str(e)}
 
-    # ── Step 4: Update memory ─────────────────────────────────────────
-    memory.add_message("user", query)
-    memory.add_message("assistant", answer_text, metadata={"sources": sources})
+def get_answer(query: str, vector_store, memory, groq_client, filter_doc: str = None) -> dict:
+    """Legacy wrapper for non-streaming calls."""
+    # Use the generator but collect it
+    gen = get_answer_stream(query, vector_store, memory, groq_client, filter_doc)
+    last_answer = ""
+    last_sources = []
+    rephrased = query
     
-    return {
-        "answer": answer_text,
-        "sources": sources,
-        "chunks_used": len(sources),
-        "rephrased_query": rephrased_query
-    }
+    for item in gen:
+        if item["type"] == "rephrased": rephrased = item["content"]
+        if item["type"] == "sources": last_sources = item["content"]
+        if item["type"] == "done":
+            return {
+                "answer": item["answer"],
+                "sources": item["sources"],
+                "chunks_used": len(item["sources"]),
+                "rephrased_query": rephrased
+            }
+        if item["type"] == "error":
+            raise Exception(item["content"])
+            
+    return {"answer": "I encountered an error generating the response.", "sources": [], "chunks_used": 0, "rephrased_query": rephrased}
