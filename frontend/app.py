@@ -60,11 +60,14 @@ st.markdown("""
         border-radius: 6px; padding: 0.5rem 1rem; font-weight: 500;
     }
     
-    /* HIDE THE AUDIO PLAYER COMPONENT COMPLETELY */
-    audio { display: none !important; }
-    div[data-testid="stAudio"] { display: none !important; height: 0px !important; margin: 0px !important; padding: 0px !important; }
+    /* HIDE STREAMING PLAYER BUT KEEP IT FUNCTIONAL */
+    div[data-testid="stAudio"] { 
+        position: fixed; bottom: 0; left: 0; width: 1px; height: 1px; opacity: 0.01; overflow: hidden; pointer-events: none;
+    }
     
-    #MainMenu, footer, header {visibility: hidden;}
+    #MainMenu, footer {visibility: hidden;}
+    header[data-testid="stHeader"] { visibility: visible !important; background: transparent !important; }
+    button[data-testid="stSidebarCollapseButton"] { background-color: #1e293b !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -350,30 +353,24 @@ if "pending_query" not in st.session_state:
     st.session_state.pending_query = None
 
 def on_enter():
-    if st.session_state.text_input.strip():
+    if st.session_state.text_input:
         st.session_state.pending_query = st.session_state.text_input
         st.session_state.text_input = ""
 
-c1, c2, c3 = st.columns([10, 1, 1], vertical_alignment="bottom")
+c1, c2, c3 = st.columns([12, 1, 2], vertical_alignment="bottom")
 with c1:
-    st.text_input("Summarize, ask a question, or find insights...", key="text_input", label_visibility="collapsed", on_change=on_enter)
+    st.text_input("Summarize, ask a question, or find insights...", key="text_input", label_visibility="collapsed", on_change=on_enter, placeholder="Type here or leave empty for a full summary...")
 with c2:
-    audio_stream = audio_recorder(text="", icon_size="2x", neutral_color="#2563eb")
+    audio_stream = audio_recorder(text="", icon_size="2x", neutral_color="#94a3b8")
 with c3:
-    send_trigger = st.button("Analyze", use_container_width=True)
+    send_trigger = st.button("Analyze", use_container_width=True, type="primary")
 
 query_to_process = None
 if send_trigger:
-    # Handle button click
-    if st.session_state.text_input.strip():
-        query_to_process = st.session_state.text_input
-        st.session_state.text_input = ""
-    elif st.session_state.pending_query:
-        query_to_process = st.session_state.pending_query
-        st.session_state.pending_query = None
-    else:
-        # User clicked Analyze with empty input - do nothing instead of auto-summarizing
-        st.warning("Please enter a question or use the microphone to begin analysis.")
+    # Handle button click - ALLOW empty for summary
+    query_to_process = st.session_state.text_input
+    st.session_state.text_input = ""
+    # If both are empty, it will trigger the default summary in process_query
 elif st.session_state.pending_query:
     query_to_process = st.session_state.pending_query
     st.session_state.pending_query = None
@@ -381,7 +378,7 @@ elif st.session_state.pending_query:
 if "last_audio_bytes" not in st.session_state:
     st.session_state.last_audio_bytes = None
 
-if query_to_process:
+if query_to_process is not None:
     process_query(query_to_process)
 elif audio_stream and audio_stream != st.session_state.last_audio_bytes:
     st.session_state.last_audio_bytes = audio_stream
