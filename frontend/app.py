@@ -192,7 +192,14 @@ with st.sidebar:
     st.divider()
     
     st.subheader("Document Repository")
-    uploaded_files = st.file_uploader("Index Documents", type=["pdf", "docx", "txt", "md"], accept_multiple_files=True, label_visibility="collapsed")
+    
+    # Hide uploader if 3 files are already indexed
+    indexed_count = len(st.session_state.docs) if st.session_state.docs else 0
+    if indexed_count < 3:
+        uploaded_files = st.file_uploader("Index Documents", type=["pdf", "docx", "txt", "md"], accept_multiple_files=True, label_visibility="collapsed")
+    else:
+        st.info("📂 **Repository Full**: Please delete a document to upload new intelligence.")
+        uploaded_files = None
     
     # Track files for auto-sync and rescue
     if uploaded_files:
