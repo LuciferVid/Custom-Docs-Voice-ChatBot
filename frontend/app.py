@@ -74,7 +74,13 @@ st.markdown("""
     
     #MainMenu, footer {visibility: hidden;}
     header[data-testid="stHeader"] { visibility: visible !important; background: transparent !important; }
-    button[data-testid="stSidebarCollapseButton"] { background-color: #1e293b !important; }
+    button[data-testid="stSidebarCollapseButton"] { 
+        visibility: visible !important; 
+        background-color: #2563eb !important; 
+        color: white !important;
+        border-radius: 50% !important;
+        padding: 5px !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -173,7 +179,12 @@ def process_query(query, is_audio=False, audio_data=None):
                     play_audio(answer)
                 st.rerun()
             else:
-                st.error("Audio signal lost. Please try again.")
+                try:
+                    error_detail = resp.json().get("detail", "Unknown Error")
+                except:
+                    error_detail = resp.text[:100]
+                st.error(f"📡 Audio Signal Lost: {error_detail}")
+                st.session_state.messages.pop() # Cleanup UI
                 return
 
     # Text query with STREAMING
