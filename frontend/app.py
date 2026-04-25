@@ -320,8 +320,8 @@ if send_trigger:
         query_to_process = st.session_state.pending_query
         st.session_state.pending_query = None
     else:
-        # Fallback for empty analyze button click
-        query_to_process = "Please provide a comprehensive summary of the latest intelligence."
+        # User clicked Analyze with empty input - do nothing instead of auto-summarizing
+        st.warning("Please enter a question or use the microphone to begin analysis.")
 elif st.session_state.pending_query:
     query_to_process = st.session_state.pending_query
     st.session_state.pending_query = None
