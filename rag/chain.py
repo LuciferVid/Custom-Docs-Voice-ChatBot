@@ -36,6 +36,20 @@ def _is_casual(query: str) -> bool:
         return True
     return False
 
+def _is_summary_request(query: str) -> bool:
+    """Detect if the user is asking for a general summary or detailed analysis of the whole document."""
+    patterns = [
+        r"tell me (everything|all) about",
+        r"summarize",
+        r"summary",
+        r"detailed analysis",
+        r"what (is|has|contains) the (document|pdf|file)",
+        r"what'?s in this",
+        r"overview",
+        r"comprehensive"
+    ]
+    return any(re.search(p, query, re.IGNORECASE) for p in patterns)
+
 def get_answer(query: str, vector_store, memory, groq_client, filter_doc: str = None) -> dict:
     """
     Orchestrates the RAG process using Groq exclusively.
@@ -83,7 +97,9 @@ def get_answer(query: str, vector_store, memory, groq_client, filter_doc: str = 
             pass
             
     # ── Step 2: Retrieve context ──────────────────────────────────────
-    context, sources = retrieve_context(rephrased_query, vector_store, filter_doc=filter_doc)
+    # Increase context depth for summary/analysis requests
+    top_k = 15 if _is_summary_request(query) or _is_summary_request(rephrased_query) else 4
+    context, sources = retrieve_context(rephrased_query, vector_store, top_k=top_k, filter_doc=filter_doc)
     
     # ── Step 3: Generate answer ───────────────────────────────────────
     try:

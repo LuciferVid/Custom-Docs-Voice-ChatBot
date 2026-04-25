@@ -15,10 +15,18 @@ load_dotenv()
 BACKEND_URL = os.getenv("BACKEND_URL", "https://custom-docs-voice-chatbot.onrender.com")
 
 # Session ID Management
+params = st.query_params
 if "session_id" not in st.session_state:
-    st.session_state.session_id = str(uuid.uuid4())
+    if "session" in params:
+        st.session_state.session_id = params["session"]
+    else:
+        st.session_state.session_id = str(uuid.uuid4())
+        st.query_params["session"] = st.session_state.session_id
+elif "session" not in params or params["session"] != st.session_state.session_id:
+    st.query_params["session"] = st.session_state.session_id
 
-SESSION_HEADERS = {"X-Session-ID": st.session_state.session_id}
+SESSION_ID = st.session_state.session_id
+SESSION_HEADERS = {"X-Session-ID": SESSION_ID}
 
 st.set_page_config(page_title="Intelligence Core | RAG", page_icon="🔗", layout="wide")
 
