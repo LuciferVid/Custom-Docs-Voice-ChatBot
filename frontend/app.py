@@ -84,14 +84,15 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-def play_audio(text):
+def set_audio_to_play(text):
     """
-    Synthesizes speech from text using the backend and plays it in the browser.
+    Synthesizes speech from text using the backend and prepares it to be played invisibly after rerun.
     """
     try:
         resp = requests.post(f"{BACKEND_URL}/chat/voice-output", json={"text": text}, headers=SESSION_HEADERS, timeout=30)
         if resp.status_code == 200:
-            st.audio(resp.content, format="audio/mp3", autoplay=True)
+            audio_base64 = base64.b64encode(resp.content).decode('utf-8')
+            st.session_state.audio_to_play = audio_base64
     except Exception as e:
         st.error(f"Audio Synthesis Failed: {e}")
 
@@ -111,6 +112,9 @@ if "messages" not in st.session_state:
         st.session_state.messages = resp.json() if resp.status_code == 200 else []
     except:
         st.session_state.messages = []
+
+if "audio_to_play" not in st.session_state:
+    st.session_state.audio_to_play = None
 
 if "auto_play" not in st.session_state:
     st.session_state.auto_play = True
@@ -176,7 +180,7 @@ def process_query(query, is_audio=False, audio_data=None):
                 answer = result["answer"]
                 st.session_state.messages.append({"role": "assistant", "content": answer})
                 if st.session_state.auto_play:
-                    play_audio(answer)
+                    set_audio_to_play(answer)
                 st.rerun()
             else:
                 try:
@@ -233,7 +237,7 @@ def process_query(query, is_audio=False, audio_data=None):
             # Finalize
             st.session_state.messages.append({"role": "assistant", "content": full_answer})
             if st.session_state.auto_play:
-                play_audio(full_answer)
+                set_audio_to_play(full_answer)
             st.rerun()
             
         except Exception as e:
@@ -362,7 +366,7 @@ else:
         else:
             st.markdown(f'<div class="assistant-bubble">{content}</div>', unsafe_allow_html=True)
             if st.button("Listen", key=f"play_{i}"):
-                play_audio(content)
+                set_audio_to_play(content)
 
 # Input Control (Always Visible)
 st.write("---")
@@ -401,3 +405,13 @@ if query_to_process is not None:
 elif audio_stream and audio_stream != st.session_state.last_audio_bytes:
     st.session_state.last_audio_bytes = audio_stream
     process_query("", is_audio=True, audio_data=audio_stream)
+
+# --- Render Hidden Audio Player ---
+if st.session_state.audio_to_play:
+    audio_html = f"""
+        <audio autoplay="true" style="display:none;">
+            <source src="data:audio/mp3;base64,{st.session_state.audio_to_play}" type="audio/mp3">
+        </audio>
+    """
+    st.markdown(audio_html, unsafe_allow_html=True)
+    st.session_state.audio_to_play = None  # Clear flag so it plays exactly once
