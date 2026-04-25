@@ -61,9 +61,15 @@ st.markdown("""
         border-radius: 6px; padding: 0.5rem 1rem; font-weight: 500;
     }
     
-    /* HIDE STREAMING PLAYER BUT KEEP IT FUNCTIONAL */
+    /* AGGRESSIVELY HIDE AUDIO PLAYER BUT KEEP FUNCTIONAL */
     div[data-testid="stAudio"] { 
-        position: fixed; bottom: 0; left: 0; width: 1px; height: 1px; opacity: 0.01; overflow: hidden; pointer-events: none;
+        display: block !important;
+        position: absolute !important;
+        width: 0.1px !important;
+        height: 0.1px !important;
+        overflow: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
     }
     
     #MainMenu, footer {visibility: hidden;}
