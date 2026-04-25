@@ -183,14 +183,28 @@ async def chat_voice_input(audio: UploadFile = File(...), x_session_id: str = He
     state = get_state(x_session_id)
     try:
         audio_bytes = await audio.read()
+        audio_size = len(audio_bytes)
+        print(f"🎤 Received Audio: {audio_size} bytes (Session: {x_session_id})")
+        
+        if audio_size < 100:
+            raise HTTPException(status_code=400, detail="Audio signal too short or empty.")
+            
         client = get_groq_client()
+        
+        # Transcribe
         transcription = transcribe_audio(audio_bytes, groq_client=client)
         if not transcription:
-            return {"answer": "I couldn't hear you clearly.", "transcription": ""}
+            print("❌ Transcription returned empty text")
+            return {"answer": "I couldn't hear you clearly. Please speak louder or closer to the mic.", "transcription": ""}
+            
+        print(f"📝 Transcribed: '{transcription}'")
+        
+        # Get answer using the legacy wrapper
         response = get_answer(transcription, state["vector_store"], state["memory"], groq_client=client)
         response["transcription"] = transcription
         return response
     except Exception as e:
+        print(f"💥 Voice Input Critical Failure: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/chat/voice-output")
